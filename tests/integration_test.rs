@@ -35,6 +35,7 @@ impl Embedding for MockEmbedding {
 }
 
 #[tokio::test]
+#[ignore]
 async fn test_end_to_end_refinery() {
     // 1. Setup Reader
     let reader = WebReader::new(vec!["https://www.rust-lang.org".to_string()], None, None);

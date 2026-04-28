@@ -31,7 +31,8 @@ pub struct RelatedNodeInfo {
 pub enum NodeContent {
     Text(String),
     Binary(Vec<u8>),
-    Image(Vec<u8>), // Placeholder for actual image data handling
+    Image(Vec<u8>),
+    Purged, // Content has been moved to tokens/embeddings and string is freed
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -49,13 +50,17 @@ pub struct Node {
 }
 
 impl Node {
-    pub fn new_text(text: String) -> Self {
-        let mut hasher = blake3::Hasher::new();
-        hasher.update(text.as_bytes());
-        let id_ = hasher.finalize().to_hex().to_string();
+    /// Discard the original string content to save memory. 
+    /// Should only be called after tokens or embeddings are generated.
+    pub fn purge_text(&mut self) {
+        if let NodeContent::Text(_) = self.content {
+            self.content = NodeContent::Purged;
+        }
+    }
 
-        Self {
-            id_,
+    pub fn new_text(text: String) -> Self {
+        let mut node = Self {
+            id_: String::new(), // Temporary
             embedding: None,
             tokens: None,
             metadata: HashMap::new(),
@@ -65,16 +70,34 @@ impl Node {
             content: NodeContent::text(text),
             metadata_template: "{key}: {value}".to_string(),
             metadata_separator: "\n".to_string(),
-        }
+        };
+        node.id_ = node.hash();
+        node
     }
 
     pub fn hash(&self) -> String {
         let mut hasher = blake3::Hasher::new();
-        // Content-based hashing for determinism
+        
+        // 1. Hash Content
         match &self.content {
-            NodeContent::Text(t) => hasher.update(t.as_bytes()),
-            NodeContent::Binary(b) | NodeContent::Image(b) => hasher.update(b),
-        };
+            NodeContent::Text(t) => {
+                hasher.update(t.as_bytes());
+            }
+            NodeContent::Binary(b) | NodeContent::Image(b) => {
+                hasher.update(b);
+            }
+            NodeContent::Purged => {
+                // For purged nodes, we rely on the pre-calculated ID 
+                // but since we want to return a String, we just return id_
+                return self.id_.clone();
+            }
+        }
+
+        // 2. Hash Metadata (Deterministic JSON representation)
+        if let Ok(meta_json) = serde_json::to_string(&self.metadata) {
+            hasher.update(meta_json.as_bytes());
+        }
+
         hasher.finalize().to_hex().to_string()
     }
 

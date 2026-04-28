@@ -56,19 +56,25 @@ pub fn filter_metadata(
 }
 
 pub fn cosine_similarity(v1: &[f16], v2: &[f16]) -> f32 {
-    let mut dot_product: f32 = 0.0;
-    let mut norm_v1: f32 = 0.0;
-    let mut norm_v2: f32 = 0.0;
-
-    for (a, b) in v1.iter().zip(v2.iter()) {
-        let a_f = a.to_f32();
-        let b_f = b.to_f32();
-        dot_product += a_f * b_f;
-        norm_v1 += a_f * a_f;
-        norm_v2 += b_f * b_f;
+    if v1.len() != v2.len() || v1.is_empty() {
+        return 0.0;
     }
 
-    if norm_v1 == 0.0 || norm_v2 == 0.0 {
+    let mut dot_product = 0.0;
+    let mut norm_v1 = 0.0;
+    let mut norm_v2 = 0.0;
+
+    // Hint compiler for auto-vectorization: ensure length is checked and use simple indexing
+    let len = v1.len();
+    for i in 0..len {
+        let a = v1[i].to_f32();
+        let b = v2[i].to_f32();
+        dot_product += a * b;
+        norm_v1 += a * a;
+        norm_v2 += b * b;
+    }
+
+    if norm_v1 <= 0.0 || norm_v2 <= 0.0 {
         return 0.0;
     }
 

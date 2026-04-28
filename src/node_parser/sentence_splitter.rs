@@ -127,13 +127,14 @@ impl Transformation for SentenceSplitter {
                 let metadata_str = node.metadata_to_str();
                 let metadata_len = self.count_tokens(&metadata_str);
                 
-                let effective_chunk_size = if self.config.chunk_size > metadata_len {
-                    self.config.chunk_size - metadata_len
-                } else {
-                    // Fallback if metadata is too large
-                    log::warn!("Metadata token length ({}) exceeds chunk_size ({})", metadata_len, self.config.chunk_size);
-                    1 // Minimum size
-                };
+                if metadata_len >= self.config.chunk_size {
+                    return Err(anyhow::anyhow!(
+                        "Metadata length ({}) exceeds or equals chunk_size ({}). Cannot split node {}.", 
+                        metadata_len, self.config.chunk_size, node.id_
+                    ));
+                }
+
+                let effective_chunk_size = self.config.chunk_size - metadata_len;
 
                 let splits = self.split(text, effective_chunk_size);
                 let chunks = self.merge(splits, effective_chunk_size, self.config.chunk_overlap);

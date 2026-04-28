@@ -44,7 +44,7 @@ impl Reader for SimpleDirectoryReader {
                 async move {
                     let content = tokio::fs::read_to_string(&path).await?;
                     let mut node = Node::new_text(content);
-                    node.metadata.insert("file_path".to_string(), serde_json::Value::String(path.to_string_lossy().to_string()));
+                    node.metadata.file_path = Some(path.to_string_lossy().to_string());
                     Ok(node)
                 }
             })

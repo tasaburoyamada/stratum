@@ -101,9 +101,9 @@ async fn test_lock_poisoning_vulnerability() {
     // Now try to use the doc_store
     let result = doc_store.get_document("any").await;
     
-    // In current implementation, it should return an Error with "Lock poisoned"
+    // In current implementation, it should return an Error with "ERR_LOCK_POISONED"
     assert!(result.is_err(), "Expected error due to lock poisoning, but got {:?}", result);
     let err_msg = result.unwrap_err().to_string();
     println!("Caught expected error: {}", err_msg);
-    assert!(err_msg.contains("Lock poisoned"));
+    assert!(err_msg.contains("ERR_LOCK_POISONED"));
 }

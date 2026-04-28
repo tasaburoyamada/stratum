@@ -169,7 +169,7 @@ impl Transformation for SentenceSplitter {
                             .push(crate::core::schema::RelatedNodeInfo {
                                 node_id: prev_id,
                                 node_type: Some(crate::core::schema::NodeType::Text),
-                                metadata: std::collections::HashMap::new(),
+                                metadata: crate::core::schema::TypedMetadata::default(),
                                 hash: None,
                             });
                     }
@@ -180,7 +180,7 @@ impl Transformation for SentenceSplitter {
                             .push(crate::core::schema::RelatedNodeInfo {
                                 node_id: next_id,
                                 node_type: Some(crate::core::schema::NodeType::Text),
-                                metadata: std::collections::HashMap::new(),
+                                metadata: crate::core::schema::TypedMetadata::default(),
                                 hash: None,
                             });
                     }

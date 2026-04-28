@@ -1,39 +1,49 @@
 use crate::vector_stores::types::{MetadataFilter, FilterOperator, FilterCondition};
-use std::collections::HashMap;
 use serde_json::Value;
 use half::f16;
 
+use crate::core::schema::TypedMetadata;
+
 pub fn filter_metadata(
-    metadata: &HashMap<String, Value>,
+    metadata: &TypedMetadata,
     filters: &Vec<MetadataFilter>,
     condition: &FilterCondition,
 ) -> bool {
     let results: Vec<bool> = filters.iter().map(|f| {
-        if let Some(val) = metadata.get(&f.key) {
+        // 1. Try structured fields first
+        let val_opt = match f.key.as_str() {
+            "url" => metadata.url.as_ref().map(|s| Value::String(s.clone())),
+            "file_path" => metadata.file_path.as_ref().map(|s| Value::String(s.clone())),
+            "genre" => metadata.genre.as_ref().map(|s| Value::String(s.clone())),
+            "timestamp" => metadata.timestamp.as_ref().map(|t| Value::String(t.to_rfc3339())),
+            _ => metadata.extra.get(&f.key).cloned(),
+        };
+
+        if let Some(val) = val_opt {
             match f.operator {
-                FilterOperator::Eq => val == &f.value,
-                FilterOperator::Ne => val != &f.value,
+                FilterOperator::Eq => val == f.value,
+                FilterOperator::Ne => val != f.value,
                 FilterOperator::Gt => {
-                    match (val, &f.value) {
+                    match (&val, &f.value) {
                         (Value::Number(a), Value::Number(b)) => a.as_f64() > b.as_f64(),
                         _ => false,
                     }
                 }
                 FilterOperator::Lt => {
-                    match (val, &f.value) {
+                    match (&val, &f.value) {
                         (Value::Number(a), Value::Number(b)) => a.as_f64() < b.as_f64(),
                         _ => false,
                     }
                 }
                 FilterOperator::In => {
                     if let Value::Array(arr) = &f.value {
-                        arr.contains(val)
+                        arr.contains(&val)
                     } else {
                         false
                     }
                 }
                 FilterOperator::TextMatch => {
-                    match (val, &f.value) {
+                    match (&val, &f.value) {
                         (Value::String(a), Value::String(b)) => a.contains(b),
                         _ => false,
                     }

@@ -17,6 +17,7 @@ pub mod vector_stores {
     pub mod base;
     pub mod utils;
     pub mod simple;
+    pub mod lance;
 }
 pub mod readers {
     pub mod base;

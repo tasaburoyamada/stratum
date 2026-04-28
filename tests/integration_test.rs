@@ -103,9 +103,9 @@ async fn test_pipeline_deduplication() {
     let pipeline = IngestionPipeline::new(transformations, Some(doc_store.clone()));
 
     // 2. First Run
-    let mut node = Node::new_text("This is a test document that should be split into multiple nodes.".to_string());
+    let node = Node::new_text("This is a test document that should be split into multiple nodes.".to_string());
     // id_ is now based on content hash, so we don't need to manually set it for determinism
-    let node_id = node.id_.clone();
+    let _node_id = node.id_.clone();
     
     let nodes = vec![node.clone()];
     let result_nodes_1 = pipeline.run(nodes.clone()).await.unwrap();

@@ -23,7 +23,7 @@ pub enum NodeType {
 pub struct RelatedNodeInfo {
     pub node_id: String,
     pub node_type: Option<NodeType>,
-    pub metadata: HashMap<String, serde_json::Value>,
+    pub metadata: TypedMetadata,
     pub hash: Option<String>,
 }
 
@@ -35,12 +35,21 @@ pub enum NodeContent {
     Purged, // Content has been moved to tokens/embeddings and string is freed
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct TypedMetadata {
+    pub url: Option<String>,
+    pub file_path: Option<String>,
+    pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
+    pub genre: Option<String>,
+    pub extra: HashMap<String, serde_json::Value>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Node {
     pub id_: String,
     pub embedding: Option<Vec<f16>>,
     pub tokens: Option<Vec<u32>>, // AI-native token representation
-    pub metadata: HashMap<String, serde_json::Value>,
+    pub metadata: TypedMetadata,  // Structured metadata for Arrow/LanceDB
     pub excluded_embed_metadata_keys: Vec<String>,
     pub excluded_llm_metadata_keys: Vec<String>,
     pub relationships: HashMap<NodeRelationship, Vec<RelatedNodeInfo>>,
@@ -78,7 +87,7 @@ impl Node {
             id_: String::new(), // Temporary
             embedding: None,
             tokens: None,
-            metadata: HashMap::new(),
+            metadata: TypedMetadata::default(),
             excluded_embed_metadata_keys: Vec::new(),
             excluded_llm_metadata_keys: Vec::new(),
             relationships: HashMap::new(),
@@ -102,13 +111,11 @@ impl Node {
                 hasher.update(b);
             }
             NodeContent::Purged => {
-                // For purged nodes, we rely on the pre-calculated ID 
-                // but since we want to return a String, we just return id_
                 return self.id_.clone();
             }
         }
 
-        // 2. Hash Metadata (Deterministic JSON representation)
+        // 2. Hash Metadata (Deterministic)
         if let Ok(meta_json) = serde_json::to_string(&self.metadata) {
             hasher.update(meta_json.as_bytes());
         }
@@ -118,7 +125,25 @@ impl Node {
 
     pub fn metadata_to_str(&self) -> String {
         let mut metadata_lines = Vec::new();
-        for (key, value) in &self.metadata {
+        
+        // Helper to add structured fields
+        let mut add_field = |key: &str, val: Option<String>| {
+            if let Some(v) = val {
+                if !self.excluded_embed_metadata_keys.contains(&key.to_string()) {
+                    metadata_lines.push(self.metadata_template.replace("{key}", key).replace("{value}", &v));
+                }
+            }
+        };
+
+        add_field("url", self.metadata.url.clone());
+        add_field("file_path", self.metadata.file_path.clone());
+        add_field("genre", self.metadata.genre.clone());
+        if let Some(ts) = self.metadata.timestamp {
+            add_field("timestamp", Some(ts.to_rfc3339()));
+        }
+
+        // Add extra fields
+        for (key, value) in &self.metadata.extra {
             if self.excluded_embed_metadata_keys.contains(key) {
                 continue;
             }

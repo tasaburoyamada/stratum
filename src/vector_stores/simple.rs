@@ -1,4 +1,4 @@
-use crate::core::schema::Node;
+use crate::core::schema::{Node, TypedMetadata};
 use crate::vector_stores::base::VectorStore;
 use crate::vector_stores::types::{VectorStoreQuery, VectorStoreQueryResult};
 use crate::vector_stores::utils::{cosine_similarity, filter_metadata};
@@ -13,7 +13,7 @@ use rayon::prelude::*;
 #[derive(Serialize, Deserialize, Default)]
 struct SimpleVectorStoreData {
     embedding_dict: HashMap<String, Vec<f16>>,
-    metadata_dict: HashMap<String, HashMap<String, serde_json::Value>>,
+    metadata_dict: HashMap<String, TypedMetadata>,
 }
 
 pub struct SimpleVectorStore {
@@ -31,7 +31,7 @@ impl SimpleVectorStore {
 #[async_trait]
 impl VectorStore for SimpleVectorStore {
     async fn add(&self, nodes: Vec<Node>) -> Result<Vec<String>> {
-        let mut data = self.data.write().map_err(|e| anyhow::anyhow!("Lock poisoned: {}", e))?;
+        let mut data = self.data.write().map_err(|e| anyhow::anyhow!("ERR_LOCK_POISONED: {}", e))?;
         let mut ids = Vec::new();
 
         for node in nodes {
@@ -46,14 +46,14 @@ impl VectorStore for SimpleVectorStore {
     }
 
     async fn delete(&self, node_id: &str) -> Result<()> {
-        let mut data = self.data.write().map_err(|e| anyhow::anyhow!("Lock poisoned: {}", e))?;
+        let mut data = self.data.write().map_err(|e| anyhow::anyhow!("ERR_LOCK_POISONED: {}", e))?;
         data.embedding_dict.remove(node_id);
         data.metadata_dict.remove(node_id);
         Ok(())
     }
 
     async fn query(&self, query: VectorStoreQuery) -> Result<VectorStoreQueryResult> {
-        let data = self.data.read().map_err(|e| anyhow::anyhow!("Lock poisoned: {}", e))?;
+        let data = self.data.read().map_err(|e| anyhow::anyhow!("ERR_LOCK_POISONED: {}", e))?;
         let query_embedding = query.query_embedding.ok_or_else(|| anyhow::anyhow!("Query embedding missing"))?;
 
         // 1. Pre-filtering (Parallelizable)
@@ -99,7 +99,7 @@ impl VectorStore for SimpleVectorStore {
     }
 
     async fn persist(&self, path: &str) -> Result<()> {
-        let data = self.data.read().map_err(|e| anyhow::anyhow!("Lock poisoned: {}", e))?;
+        let data = self.data.read().map_err(|e| anyhow::anyhow!("ERR_LOCK_POISONED: {}", e))?;
         let encoded: Vec<u8> = bincode::serialize(&*data)?;
         
         let tmp_path = format!("{}.tmp", path);

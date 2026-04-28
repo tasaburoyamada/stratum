@@ -24,7 +24,7 @@ impl EmbeddingManager {
         config_path: &str,
         device: Option<Device>
     ) -> Result<Arc<dyn Embedding>> {
-        let mut models = self.models.lock().map_err(|_| anyhow::anyhow!("Lock poisoned"))?;
+        let mut models = self.models.lock().map_err(|_| anyhow::anyhow!("ERR_LOCK_POISONED"))?;
         
         if let Some(model) = models.get(model_name) {
             return Ok(model.clone());

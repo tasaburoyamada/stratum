@@ -39,7 +39,7 @@ impl SimpleDocumentStore {
 #[async_trait]
 impl DocumentStore for SimpleDocumentStore {
     async fn add_documents(&self, docs: Vec<Node>, allow_update: bool) -> Result<()> {
-        let mut data = self.data.write().map_err(|e| anyhow::anyhow!("Lock poisoned: {}", e))?;
+        let mut data = self.data.write().map_err(|e| anyhow::anyhow!("ERR_LOCK_POISONED: {}", e))?;
         for doc in docs {
             if !allow_update && data.docs.contains_key(&doc.id_) {
                 continue;
@@ -52,12 +52,12 @@ impl DocumentStore for SimpleDocumentStore {
     }
 
     async fn get_document(&self, doc_id: &str) -> Result<Option<Node>> {
-        let data = self.data.read().map_err(|e| anyhow::anyhow!("Lock poisoned: {}", e))?;
+        let data = self.data.read().map_err(|e| anyhow::anyhow!("ERR_LOCK_POISONED: {}", e))?;
         Ok(data.docs.get(doc_id).cloned())
     }
 
     async fn delete_document(&self, doc_id: &str, _raise_error: bool) -> Result<()> {
-        let mut data = self.data.write().map_err(|e| anyhow::anyhow!("Lock poisoned: {}", e))?;
+        let mut data = self.data.write().map_err(|e| anyhow::anyhow!("ERR_LOCK_POISONED: {}", e))?;
         data.docs.remove(doc_id);
         data.hashes.remove(doc_id);
         Ok(())
@@ -73,23 +73,23 @@ impl DocumentStore for SimpleDocumentStore {
     }
 
     async fn set_document_hash(&self, doc_id: &str, hash: &str) -> Result<()> {
-        let mut data = self.data.write().map_err(|e| anyhow::anyhow!("Lock poisoned: {}", e))?;
+        let mut data = self.data.write().map_err(|e| anyhow::anyhow!("ERR_LOCK_POISONED: {}", e))?;
         data.hashes.insert(doc_id.to_string(), hash.to_string());
         Ok(())
     }
 
     async fn get_document_hash(&self, doc_id: &str) -> Result<Option<String>> {
-        let data = self.data.read().map_err(|e| anyhow::anyhow!("Lock poisoned: {}", e))?;
+        let data = self.data.read().map_err(|e| anyhow::anyhow!("ERR_LOCK_POISONED: {}", e))?;
         Ok(data.hashes.get(doc_id).cloned())
     }
 
     async fn get_all_document_hashes(&self) -> Result<HashMap<String, String>> {
-        let data = self.data.read().map_err(|e| anyhow::anyhow!("Lock poisoned: {}", e))?;
+        let data = self.data.read().map_err(|e| anyhow::anyhow!("ERR_LOCK_POISONED: {}", e))?;
         Ok(data.hashes.clone())
     }
 
     async fn persist(&self, path: &str) -> Result<()> {
-        let data = self.data.read().map_err(|e| anyhow::anyhow!("Lock poisoned: {}", e))?;
+        let data = self.data.read().map_err(|e| anyhow::anyhow!("ERR_LOCK_POISONED: {}", e))?;
         let encoded: Vec<u8> = bincode::serialize(&*data)?;
         
         let tmp_path = format!("{}.tmp", path);

@@ -42,7 +42,7 @@ impl WebReader {
         }
 
         let mut node = Node::new_text(markdown);
-        node.metadata.insert("url".to_string(), serde_json::Value::String(url));
+        node.metadata.url = Some(url);
         Ok(node)
     }
 }

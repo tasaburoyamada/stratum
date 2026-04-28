@@ -1,0 +1,39 @@
+@CTX:[DOM:PROJECT_LLAMA_INDEX_RS|SUB:DESIGN_SPEC|GOAL:AI_NATIVE_REFINERY]
+@TARGET_REPLACEMENT
+- [LlamaIndex] -> Trait-based Modular Orchestrator
+- [Sentence-Transformers] -> Candle-based In-binary Embedding
+- [Pydantic] -> Serde-based Static Schema
+- [BeautifulSoup] -> Reqwest-scraper Streaming
+- [VectorDBs] -> LanceDB Embedded Storage (Blocked by ENV: missing protoc)
+
+@ROBUSTNESS_STATUS
+- [Lock Poisoning] -> Resolved: All RwLock/Mutex usages use explicit error handling.
+- [Atomic Write] -> Implemented for IndexStore.
+- [Content ID] -> Implemented via Blake3.
+
+@COMPONENTS_DETAIL
+...
+
+[[CORE_NODE]]
+- Content: Raw Bitstream (Optional)
+- ID: Blake3 Hash (Content Determinism)
+- Vector: Vec<f16> (Memory Optimization)
+- Metadata: Bit-packed Enum Tags (Aesthetic/Genre)
+
+[[STREAM_REFINER]]
+- Input: URL/Stream
+- Process: Online Tokenization -> Embedding (No Temp File)
+- Output: Node Stream
+
+[[INDEX_ENGINE]]
+- Implementation: LanceDB (Apache Arrow)
+- Logic: Semantic Filtering over Boolean Filtering
+- Safety: Thread-safe, Async-native
+
+@WBS
+1. Physical: node.rs, types.rs, serialization.rs
+2. Refinery: refiner.rs, embedder.rs (Candle), crawler.rs
+3. Memory: storage.rs (LanceDB), index.rs
+4. Integration: feeding.rs (to Lasada/LoRA)
+
+@EOF

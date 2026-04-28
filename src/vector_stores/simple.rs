@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::sync::RwLock;
 use serde::{Deserialize, Serialize};
 use half::f16;
+use rayon::prelude::*;
 
 #[derive(Serialize, Deserialize, Default)]
 struct SimpleVectorStoreData {
@@ -55,42 +56,32 @@ impl VectorStore for SimpleVectorStore {
         let data = self.data.read().map_err(|e| anyhow::anyhow!("Lock poisoned: {}", e))?;
         let query_embedding = query.query_embedding.ok_or_else(|| anyhow::anyhow!("Query embedding missing"))?;
 
-        // 1. Pre-filtering
-        let mut filtered_ids = Vec::new();
-        let mut filtered_embeddings = Vec::new();
-
-        for (node_id, embedding) in &data.embedding_dict {
-            let metadata = data.metadata_dict.get(node_id);
-            
-            // Apply Metadata Filters
-            let filter_passed = if let Some(filters) = &query.filters {
-                if let Some(m) = metadata {
-                    filter_metadata(m, &filters.filters, &filters.condition)
+        // 1. Pre-filtering (Parallelizable)
+        let filtered_data: Vec<_> = data.embedding_dict.par_iter()
+            .filter(|(node_id, _)| {
+                let metadata = data.metadata_dict.get(*node_id);
+                if let Some(filters) = &query.filters {
+                    if let Some(m) = metadata {
+                        filter_metadata(m, &filters.filters, &filters.condition)
+                    } else {
+                        false
+                    }
                 } else {
-                    false
+                    true
                 }
-            } else {
-                true
-            };
-
-            if filter_passed {
-                filtered_ids.push(node_id.clone());
-                filtered_embeddings.push(embedding);
-            }
-        }
-
-        // 2. Similarity Calculation
-        let mut scores: Vec<(f32, String)> = filtered_ids
-            .into_iter()
-            .zip(filtered_embeddings)
-            .map(|(id, emb)| {
-                let score = cosine_similarity(&query_embedding, emb);
-                (score, id)
             })
             .collect();
 
-        // 3. Sort and Take Top K
-        scores.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+        // 2. Similarity Calculation (Parallel)
+        let mut scores: Vec<(f32, String)> = filtered_data.into_par_iter()
+            .map(|(id, emb)| {
+                let score = cosine_similarity(&query_embedding, emb);
+                (score, id.clone())
+            })
+            .collect();
+
+        // 3. Sort and Take Top K (Parallel Sort)
+        scores.par_sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
         let top_k = scores.into_iter().take(query.similarity_top_k).collect::<Vec<_>>();
 
         let mut similarities = Vec::new();

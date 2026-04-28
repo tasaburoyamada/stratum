@@ -58,6 +58,21 @@ impl Node {
         }
     }
 
+    pub fn get_content(&self, bpe: Option<&tiktoken_rs::CoreBPE>) -> Result<String, anyhow::Error> {
+        match &self.content {
+            NodeContent::Text(t) => Ok(t.clone()),
+            NodeContent::Binary(b) => Ok(format!("<Binary data: {} bytes>", b.len())),
+            NodeContent::Image(_) => Ok("<Image data>".to_string()),
+            NodeContent::Purged => {
+                if let (Some(tokens), Some(bpe)) = (&self.tokens, bpe) {
+                    Ok(bpe.decode(tokens.clone()).map_err(|e| anyhow::anyhow!("BPE decode error: {}", e))?)
+                } else {
+                    Err(anyhow::anyhow!("Node content is purged and no BPE provided for decoding"))
+                }
+            }
+        }
+    }
+
     pub fn new_text(text: String) -> Self {
         let mut node = Self {
             id_: String::new(), // Temporary

@@ -1,4 +1,4 @@
-use crate::core::schema::{NodeWithScore, NodeContent};
+use crate::core::schema::NodeWithScore;
 use crate::core::query_bundle::QueryBundle;
 use crate::synthesizers::base::{ResponseSynthesizer, DEFAULT_TEXT_QA_PROMPT, DEFAULT_REFINE_PROMPT};
 use anyhow::Result;
@@ -49,8 +49,8 @@ impl CompactAndRefine {
         let mut current_len = self.count_tokens(&text_qa_template.replace("{query_str}", query_str));
 
         for node in nodes {
-            if let NodeContent::Text(text) = &node.node.content {
-                let text_len = self.count_tokens(text);
+            if let Ok(text) = node.node.get_content(Some(&self.bpe)) {
+                let text_len = self.count_tokens(&text);
                 
                 // If a single node is larger than the limit, we have to force split it
                 // though usually nodes are chunked by splitter earlier.
@@ -67,7 +67,7 @@ impl CompactAndRefine {
                     }
                 }
                 current_len += text_len;
-                current_chunk.push(text.clone());
+                current_chunk.push(text);
             }
         }
 

@@ -49,6 +49,7 @@ pub mod retrievers {
     pub mod base;
     pub mod vector_store_retriever;
     pub mod hierarchical_retriever;
+    pub mod hybrid;
 }
 pub mod storage {
     pub mod storage_context;

@@ -2,11 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.3.0-dev] - 2026-05-06
+## [0.3.0] - 2026-05-06
 
 ### Added
+- **PDF Support**: Added `PdfReader` for extracting text from PDF documents using pure-Rust `pdf-extract`.
+- **Hybrid Retriever**: New `HybridRetriever` supporting `WeightedSum` and `ReciprocalRankFusion` (RRF) for combining multiple search strategies.
 - **Hierarchical Index (PageIndex)**: Implemented a recursive summarization-based index that enables semantic traversal without vector embeddings.
-- **HierarchicalRetriever**: A new retriever that performs top-down semantic search via LLM reasoning.
+- **Hierarchical Persistence**: Ensured hierarchical indexes can be fully restored from storage with root node tracking.
+
+### Changed
+- **Index Management**: Integrated `IndexStore` into `VectorStoreIndex` for automated metadata tracking.
+- **Improved Metadata**: Added `extra` fields to `IndexStruct` for custom index-specific metadata.
 
 ## [0.2.0] - 2026-05-06
 

@@ -25,6 +25,7 @@ pub mod readers {
     pub mod file;
     pub mod web;
     pub mod json;
+    pub mod pdf;
 }
 pub mod indices {
     pub mod vector_store;

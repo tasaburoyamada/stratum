@@ -28,6 +28,7 @@ walkdir = "2.3"
 reqwest = { version = "0.11", default-features = false, features = ["json", "stream", "rustls-tls"] }
 hnsw_rs = "0.3"
 redb = "2.0"
+pdf-extract = "0.7"
 scraper = "0.17"
 html2md = "0.2"
 rand = "0.8"

@@ -125,4 +125,13 @@ impl LlmClient for CandleLlm {
 
         Ok(generated_text)
     }
+
+    fn clone_box(&self) -> Box<dyn LlmClient> {
+        Box::new(Self {
+            device: self.device.clone(),
+            tokenizer: self.tokenizer.clone(),
+            model: self.model.clone(),
+            cache: self.cache.clone(),
+        })
+    }
 }

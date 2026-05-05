@@ -22,6 +22,10 @@ impl LlmClient for MockHierarchicalLlm {
             Ok("Mock response".to_string())
         }
     }
+
+    fn clone_box(&self) -> Box<dyn LlmClient> {
+        Box::new(Self)
+    }
 }
 
 #[tokio::test]

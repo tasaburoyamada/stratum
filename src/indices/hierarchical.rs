@@ -66,6 +66,7 @@ impl HierarchicalIndex {
 
         // 2. Recursive summarization with semantic grouping
         while current_level_nodes.len() > 1 {
+            use futures::stream::{self, StreamExt};
             let mut next_level_nodes = Vec::new();
             
             // Group by source (e.g. file_path) if available
@@ -77,42 +78,58 @@ impl HierarchicalIndex {
                 groups.entry(key).or_insert_with(Vec::new).push(node);
             }
 
+            let mut tasks = Vec::new();
             for (_key, group_nodes) in groups {
-                let chunks = group_nodes.chunks(5);
-                for chunk in chunks {
-                    let summary_node = Self::summarize_nodes(chunk, llm.clone()).await?;
-                    
-                    // Set Relationships
-                    let mut rels = HashMap::new();
-                    let children_info: Vec<RelatedNodeInfo> = chunk.iter().map(|n| {
-                        RelatedNodeInfo {
-                            node_id: n.id_.clone(),
-                            node_type: Some(NodeType::Text),
-                            metadata: n.metadata.clone(),
-                            hash: Some(n.hash()),
-                        }
-                    }).collect();
-                    rels.insert(NodeRelationship::Child, children_info);
-                    
-                    let mut summary_node = summary_node;
-                    summary_node.relationships = rels;
-                    
-                    // Update children with Parent relationship
-                    for child in chunk {
-                        let mut updated_child = child.clone();
-                        updated_child.relationships.entry(NodeRelationship::Parent)
-                            .or_insert_with(Vec::new)
-                            .push(RelatedNodeInfo {
-                                node_id: summary_node.id_.clone(),
-                                node_type: Some(NodeType::Text),
-                                metadata: summary_node.metadata.clone(),
-                                hash: Some(summary_node.hash()),
-                            });
-                        storage_context.docstore.add_documents(vec![updated_child], true).await?;
-                    }
-
-                    next_level_nodes.push(summary_node);
+                for chunk in group_nodes.chunks(5) {
+                    tasks.push(chunk.to_vec());
                 }
+            }
+
+            let mut summary_stream = stream::iter(tasks)
+                .map(|chunk| {
+                    let llm = llm.clone();
+                    let storage_context = storage_context.clone();
+                    async move {
+                        let summary_node = Self::summarize_nodes(&chunk, llm).await?;
+                        
+                        // Set Relationships
+                        let mut rels = HashMap::new();
+                        let children_info: Vec<RelatedNodeInfo> = chunk.iter().map(|n| {
+                            RelatedNodeInfo {
+                                node_id: n.id_.clone(),
+                                node_type: Some(NodeType::Text),
+                                metadata: n.metadata.clone(),
+                                hash: Some(n.hash()),
+                            }
+                        }).collect();
+                        rels.insert(NodeRelationship::Child, children_info);
+                        
+                        let mut summary_node = summary_node;
+                        summary_node.relationships = rels;
+                        
+                        // Update children with Parent relationship
+                        let mut updated_children = Vec::new();
+                        for child in chunk {
+                            let mut updated_child = child.clone();
+                            updated_child.relationships.entry(NodeRelationship::Parent)
+                                .or_insert_with(Vec::new)
+                                .push(RelatedNodeInfo {
+                                    node_id: summary_node.id_.clone(),
+                                    node_type: Some(NodeType::Text),
+                                    metadata: summary_node.metadata.clone(),
+                                    hash: Some(summary_node.hash()),
+                                });
+                            updated_children.push(updated_child);
+                        }
+                        storage_context.docstore.add_documents(updated_children, true).await?;
+
+                        Ok::<Node, anyhow::Error>(summary_node)
+                    }
+                })
+                .buffer_unordered(4); // Parallelism factor
+
+            while let Some(res) = summary_stream.next().await {
+                next_level_nodes.push(res?);
             }
             
             storage_context.docstore.add_documents(next_level_nodes.clone(), true).await?;

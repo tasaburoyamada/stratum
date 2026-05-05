@@ -22,6 +22,10 @@ impl LlmClient for MockLlm {
     async fn complete(&self, prompt: &str) -> anyhow::Result<String> {
         Ok(format!("Mock response for prompt length: {}", prompt.len()))
     }
+
+    fn clone_box(&self) -> Box<dyn LlmClient> {
+        Box::new(Self)
+    }
 }
 
 #[derive(Debug)]

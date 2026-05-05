@@ -22,6 +22,10 @@ impl LlmClient for MockLlm {
         // Return the prompt itself so we can check it
         Ok(prompt.to_string())
     }
+
+    fn clone_box(&self) -> Box<dyn LlmClient> {
+        Box::new(Self)
+    }
 }
 
 #[tokio::test]

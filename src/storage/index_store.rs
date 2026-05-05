@@ -54,3 +54,13 @@ impl IndexStore for SimpleIndexStore {
         Ok(())
     }
 }
+
+impl SimpleIndexStore {
+    pub fn load(path: &str) -> Result<Self> {
+        let bytes = std::fs::read(path)?;
+        let data: HashMap<String, IndexStruct> = bincode::deserialize(&bytes)?;
+        Ok(Self {
+            data: RwLock::new(data),
+        })
+    }
+}

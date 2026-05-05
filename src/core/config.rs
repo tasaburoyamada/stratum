@@ -22,12 +22,14 @@ impl Default for SplitterConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IndexConfig {
     pub embed_batch_size: usize,
+    pub embedding_dim: usize,
 }
 
 impl Default for IndexConfig {
     fn default() -> Self {
         Self {
             embed_batch_size: 32,
+            embedding_dim: 384, // Default for BERT-small/base
         }
     }
 }

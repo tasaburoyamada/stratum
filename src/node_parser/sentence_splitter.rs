@@ -43,9 +43,13 @@ impl SentenceSplitter {
         self.bpe.encode_with_special_tokens(text).len()
     }
 
-    fn split(&self, text: &str, chunk_size: usize) -> Vec<String> {
-        if self.count_tokens(text) <= chunk_size {
-            return vec![text.to_string()];
+    fn split(&self, text: &str, chunk_size: usize) -> Vec<SplitResult> {
+        let token_count = self.count_tokens(text);
+        if token_count <= chunk_size {
+            return vec![SplitResult {
+                text: text.to_string(),
+                token_count,
+            }];
         }
 
         // 1. Paragraph split
@@ -65,11 +69,15 @@ impl SentenceSplitter {
         self.split_recursive(&words, chunk_size)
     }
 
-    fn split_recursive(&self, items: &[&str], chunk_size: usize) -> Vec<String> {
+    fn split_recursive(&self, items: &[&str], chunk_size: usize) -> Vec<SplitResult> {
         let mut splits = Vec::new();
         for item in items {
-            if self.count_tokens(item) <= chunk_size {
-                splits.push(item.to_string());
+            let token_count = self.count_tokens(item);
+            if token_count <= chunk_size {
+                splits.push(SplitResult {
+                    text: item.to_string(),
+                    token_count,
+                });
             } else {
                 splits.extend(self.split(item, chunk_size));
             }
@@ -77,25 +85,22 @@ impl SentenceSplitter {
         splits
     }
 
-    fn merge(&self, splits: Vec<String>, chunk_size: usize, chunk_overlap: usize) -> Vec<String> {
+    fn merge(&self, splits: Vec<SplitResult>, chunk_size: usize, chunk_overlap: usize) -> Vec<String> {
         let mut chunks = Vec::new();
-        let mut cur_chunk: Vec<String> = Vec::new();
+        let mut cur_chunk: Vec<SplitResult> = Vec::new();
         let mut cur_len = 0;
 
         for split in splits {
-            let split_len = self.count_tokens(&split);
-            
-            if cur_len + split_len > chunk_size && !cur_chunk.is_empty() {
-                chunks.push(cur_chunk.join(""));
+            if cur_len + split.token_count > chunk_size && !cur_chunk.is_empty() {
+                chunks.push(cur_chunk.iter().map(|s| s.text.as_str()).collect::<Vec<_>>().join(""));
                 
                 // Handle overlap
                 let mut overlap_chunk = Vec::new();
                 let mut overlap_len = 0;
                 for s in cur_chunk.iter().rev() {
-                    let s_len = self.count_tokens(s);
-                    if overlap_len + s_len <= chunk_overlap {
+                    if overlap_len + s.token_count <= chunk_overlap {
                         overlap_chunk.insert(0, s.clone());
-                        overlap_len += s_len;
+                        overlap_len += s.token_count;
                     } else {
                         break;
                     }
@@ -104,16 +109,22 @@ impl SentenceSplitter {
                 cur_len = overlap_len;
             }
             
-            cur_len += split_len;
+            cur_len += split.token_count;
             cur_chunk.push(split);
         }
 
         if !cur_chunk.is_empty() {
-            chunks.push(cur_chunk.join(""));
+            chunks.push(cur_chunk.iter().map(|s| s.text.as_str()).collect::<Vec<_>>().join(""));
         }
 
         chunks
     }
+}
+
+#[derive(Clone)]
+struct SplitResult {
+    text: String,
+    token_count: usize,
 }
 
 #[async_trait]

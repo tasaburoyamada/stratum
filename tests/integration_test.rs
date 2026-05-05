@@ -1,15 +1,16 @@
-use llama_index_rust::readers::web::WebReader;
-use llama_index_rust::readers::base::Reader;
-use llama_index_rust::node_parser::sentence_splitter::SentenceSplitter;
-use llama_index_rust::core::ingestion::transformation::Transformation;
-use llama_index_rust::embeddings::base::Embedding;
-use llama_index_rust::vector_stores::simple::SimpleVectorStore;
-use llama_index_rust::storage::docstore::simple::SimpleDocumentStore;
-use llama_index_rust::indices::vector_store::VectorStoreIndex;
-use llama_index_rust::query_engine::retriever_query_engine::RetrieverQueryEngine;
-use llama_index_rust::retrievers::vector_store_retriever::VectorIndexRetriever;
-use llama_index_rust::synthesizers::compact_and_refine::{CompactAndRefine, LlmClient};
-use llama_index_rust::core::config::{IndexConfig, SynthesizerConfig, SplitterConfig};
+use stratum::readers::web::WebReader;
+use stratum::readers::base::Reader;
+use stratum::node_parser::sentence_splitter::SentenceSplitter;
+use stratum::core::ingestion::transformation::Transformation;
+use stratum::embeddings::base::Embedding;
+use stratum::vector_stores::simple::SimpleVectorStore;
+use stratum::storage::docstore::simple::SimpleDocumentStore;
+use stratum::indices::vector_store::VectorStoreIndex;
+use stratum::query_engine::retriever_query_engine::RetrieverQueryEngine;
+use stratum::retrievers::vector_store_retriever::VectorIndexRetriever;
+use stratum::synthesizers::compact_and_refine::CompactAndRefine;
+use stratum::llm::LlmClient;
+use stratum::core::config::{IndexConfig, SynthesizerConfig, SplitterConfig};
 use std::sync::Arc;
 use async_trait::async_trait;
 use half::f16;
@@ -51,7 +52,7 @@ async fn test_end_to_end_refinery() {
 
 #[tokio::test]
 async fn test_end_to_end_query() {
-    use llama_index_rust::core::schema::Node;
+    use stratum::core::schema::Node;
 
     // 1. Create Nodes
     let nodes = vec![
@@ -60,16 +61,21 @@ async fn test_end_to_end_query() {
     ];
 
     // 2. Setup Index components
-    let vector_store = Arc::new(SimpleVectorStore::new());
-    let doc_store = Arc::new(SimpleDocumentStore::new());
+    use stratum::storage::storage_context::StorageContext;
+    use stratum::storage::index_store::SimpleIndexStore;
+    
+    let storage_context = StorageContext::new(
+        Arc::new(SimpleDocumentStore::new()),
+        Arc::new(SimpleVectorStore::new()),
+        Arc::new(SimpleIndexStore::new()),
+    );
     let embed_model = Arc::new(MockEmbedding);
     let config = IndexConfig::default();
 
     // 3. Build Index
     let index = Arc::new(VectorStoreIndex::from_nodes(
         nodes, 
-        vector_store, 
-        doc_store, 
+        storage_context,
         embed_model, 
         config
     ).await.unwrap());
@@ -88,8 +94,8 @@ async fn test_end_to_end_query() {
 
 #[tokio::test]
 async fn test_pipeline_deduplication() {
-    use llama_index_rust::core::schema::Node;
-    use llama_index_rust::core::ingestion::pipeline::IngestionPipeline;
+    use stratum::core::schema::Node;
+    use stratum::core::ingestion::pipeline::IngestionPipeline;
 
     // 1. Setup
     let doc_store = Arc::new(SimpleDocumentStore::new());

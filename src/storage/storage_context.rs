@@ -1,8 +1,13 @@
 use crate::storage::docstore::base::DocumentStore;
 use crate::storage::index_store::IndexStore;
 use crate::vector_stores::base::VectorStore;
+use crate::storage::docstore::simple::SimpleDocumentStore;
+use crate::storage::index_store::SimpleIndexStore;
+use crate::vector_stores::simple::SimpleVectorStore;
+use crate::vector_stores::native::NativeVectorStore;
 use anyhow::Result;
 use std::sync::Arc;
+use std::path::Path;
 
 pub struct StorageContext {
     pub docstore: Arc<dyn DocumentStore>,
@@ -23,12 +28,54 @@ impl StorageContext {
         }
     }
 
+    pub fn from_defaults() -> Self {
+        Self {
+            docstore: Arc::new(SimpleDocumentStore::new()),
+            vector_store: Arc::new(SimpleVectorStore::new()),
+            index_store: Arc::new(SimpleIndexStore::new()),
+        }
+    }
+
+    pub fn from_dir(persist_dir: &str) -> Result<Self> {
+        let docstore_path = format!("{}/docstore.bin", persist_dir);
+        let index_store_path = format!("{}/index_store.bin", persist_dir);
+        let vector_store_path = format!("{}/vector_store.bin", persist_dir);
+        let native_db_path = format!("{}/native_db.redb", persist_dir);
+
+        let docstore = if Path::new(&docstore_path).exists() {
+            Arc::new(SimpleDocumentStore::load(&docstore_path)?) as Arc<dyn DocumentStore>
+        } else {
+            Arc::new(SimpleDocumentStore::new()) as Arc<dyn DocumentStore>
+        };
+
+        let index_store = if Path::new(&index_store_path).exists() {
+            Arc::new(SimpleIndexStore::load(&index_store_path)?) as Arc<dyn IndexStore>
+        } else {
+            Arc::new(SimpleIndexStore::new()) as Arc<dyn IndexStore>
+        };
+
+        let vector_store = if Path::new(&native_db_path).exists() {
+            // Assume dimension 384 for now, or we should store config
+            Arc::new(NativeVectorStore::new(&native_db_path, 384)?) as Arc<dyn VectorStore>
+        } else if Path::new(&vector_store_path).exists() {
+            Arc::new(SimpleVectorStore::load(&vector_store_path)?) as Arc<dyn VectorStore>
+        } else {
+            Arc::new(SimpleVectorStore::new()) as Arc<dyn VectorStore>
+        };
+
+        Ok(Self {
+            docstore,
+            vector_store,
+            index_store,
+        })
+    }
+
     pub async fn persist(&self, persist_dir: &str) -> Result<()> {
         std::fs::create_dir_all(persist_dir)?;
         
-        self.docstore.persist(&format!("{}/docstore.json", persist_dir)).await?;
-        self.index_store.persist(&format!("{}/index_store.json", persist_dir)).await?;
-        self.vector_store.persist(&format!("{}/vector_store.json", persist_dir)).await?;
+        self.docstore.persist(&format!("{}/docstore.bin", persist_dir)).await?;
+        self.index_store.persist(&format!("{}/index_store.bin", persist_dir)).await?;
+        self.vector_store.persist(&format!("{}/vector_store.bin", persist_dir)).await?;
         
         Ok(())
     }

@@ -22,6 +22,9 @@ impl IngestionPipeline {
         let mut processed_info = Vec::new();
 
         // 1. Deduplication (Phase 0)
+        // NOTE: We track the hash of the ORIGINAL source nodes to avoid re-processing the same content.
+        // This means if transformations (e.g. chunk size) change but the source document remains the same,
+        // it will STILL be skipped. This is a design choice to save compute, but users should be aware.
         for node in nodes {
             let hash = node.hash();
             let mut exists = false;

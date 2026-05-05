@@ -1,5 +1,5 @@
 [package]
-name = "llama-index-rust"
+name = "stratum"
 version = "0.1.0"
 edition = "2021"
 
@@ -26,6 +26,14 @@ candle-transformers = "0.8"
 tokenizers = "0.21"
 walkdir = "2.3"
 reqwest = { version = "0.11", default-features = false, features = ["json", "stream", "rustls-tls"] }
+hnsw_rs = "0.3"
+redb = "2.0"
 scraper = "0.17"
 html2md = "0.2"
 rand = "0.8"
+
+[dev-dependencies]
+tempfile = "3.8"
+env_logger = "0.11"
+tokio = { version = "1.0", features = ["full"] }
+anyhow = "1.0"

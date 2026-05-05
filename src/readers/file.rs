@@ -10,14 +10,16 @@ use crate::core::config::ReaderConfig;
 pub struct SimpleDirectoryReader {
     pub input_dir: PathBuf,
     pub recursive: bool,
+    pub required_exts: Option<Vec<String>>,
     pub config: ReaderConfig,
 }
 
 impl SimpleDirectoryReader {
-    pub fn new(input_dir: PathBuf, recursive: bool, config: Option<ReaderConfig>) -> Self {
+    pub fn new(input_dir: PathBuf, recursive: bool, required_exts: Option<Vec<String>>, config: Option<ReaderConfig>) -> Self {
         Self { 
             input_dir, 
             recursive,
+            required_exts,
             config: config.unwrap_or_default(),
         }
     }
@@ -31,9 +33,22 @@ impl Reader for SimpleDirectoryReader {
             WalkDir::new(&self.input_dir).max_depth(1)
         };
 
+        let required_exts = self.required_exts.clone();
+
         let paths: Vec<PathBuf> = walker.into_iter()
             .filter_map(|e| e.ok())
             .filter(|e| e.file_type().is_file())
+            .filter(move |e| {
+                if let Some(exts) = &required_exts {
+                    if let Some(ext) = e.path().extension() {
+                        exts.contains(&ext.to_string_lossy().to_string())
+                    } else {
+                        false
+                    }
+                } else {
+                    true
+                }
+            })
             .map(|e| e.path().to_path_buf())
             .collect();
 

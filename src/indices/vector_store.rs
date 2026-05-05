@@ -3,6 +3,8 @@ use crate::embeddings::base::Embedding;
 use crate::vector_stores::base::VectorStore;
 use crate::vector_stores::types::{VectorStoreQuery, VectorStoreQueryResult};
 use crate::storage::docstore::base::DocumentStore;
+use crate::storage::index_store::{IndexStore, IndexStruct};
+use crate::storage::storage_context::StorageContext;
 use anyhow::Result;
 use std::sync::Arc;
 
@@ -11,29 +13,49 @@ use crate::core::config::IndexConfig;
 pub struct VectorStoreIndex {
     pub vector_store: Arc<dyn VectorStore>,
     pub doc_store: Arc<dyn DocumentStore>,
+    pub index_store: Arc<dyn IndexStore>,
     pub embed_model: Arc<dyn Embedding>,
     pub config: IndexConfig,
+    pub index_id: String,
 }
 
 impl VectorStoreIndex {
     pub fn new(
         vector_store: Arc<dyn VectorStore>, 
         doc_store: Arc<dyn DocumentStore>,
+        index_store: Arc<dyn IndexStore>,
         embed_model: Arc<dyn Embedding>, 
-        config: IndexConfig
+        config: IndexConfig,
+        index_id: String,
     ) -> Self {
-        Self { vector_store, doc_store, embed_model, config }
+        Self { vector_store, doc_store, index_store, embed_model, config, index_id }
     }
 
-    /// Build index from nodes (equivalent to building from documents after chunking)
+    pub fn from_storage_context(
+        storage_context: StorageContext,
+        embed_model: Arc<dyn Embedding>,
+        config: IndexConfig,
+        index_id: String,
+    ) -> Self {
+        Self {
+            vector_store: storage_context.vector_store,
+            doc_store: storage_context.docstore,
+            index_store: storage_context.index_store,
+            embed_model,
+            config,
+            index_id,
+        }
+    }
+
+    /// Build index from nodes
     pub async fn from_nodes(
         nodes: Vec<Node>,
-        vector_store: Arc<dyn VectorStore>,
-        doc_store: Arc<dyn DocumentStore>,
+        storage_context: StorageContext,
         embed_model: Arc<dyn Embedding>,
         config: IndexConfig,
     ) -> Result<Self> {
         let mut nodes_with_embeddings = nodes;
+        let index_id = format!("idx_{}", blake3::hash(b"vector_index")); // Deterministic ID for now
         
         // 1. Generate embeddings for all nodes
         let texts: Vec<String> = nodes_with_embeddings.iter().map(|n| {
@@ -47,18 +69,35 @@ impl VectorStoreIndex {
         // Use batch size from config
         let embeddings = embed_model.get_text_embedding_batch(texts, config.embed_batch_size).await?;
 
+        let mut node_ids_dict = std::collections::HashMap::new();
+
         for (node, emb) in nodes_with_embeddings.iter_mut().zip(embeddings) {
             node.embedding = Some(emb);
+            node_ids_dict.insert(node.id_.clone(), node.id_.clone()); // Simple mapping
         }
 
-        // 2. Add to doc store (includes embeddings for persistence if needed, 
-        // but primarily to store the node content linked by ID).
-        doc_store.add_documents(nodes_with_embeddings.clone(), true).await?;
+        // 2. Add to doc store
+        storage_context.docstore.add_documents(nodes_with_embeddings.clone(), true).await?;
 
-        // 3. Add to vector store (consumes nodes, stores only embeddings and metadata).
-        vector_store.add(nodes_with_embeddings).await?;
+        // 3. Add to vector store
+        storage_context.vector_store.add(nodes_with_embeddings).await?;
 
-        Ok(Self::new(vector_store, doc_store, embed_model, config))
+        // 4. Save to index store
+        let index_struct = IndexStruct {
+            index_id: index_id.clone(),
+            summary: Some("Vector Store Index".to_string()),
+            nodes_dict: node_ids_dict,
+        };
+        storage_context.index_store.add_index_struct(index_struct).await?;
+
+        Ok(Self::new(
+            storage_context.vector_store, 
+            storage_context.docstore, 
+            storage_context.index_store,
+            embed_model, 
+            config, 
+            index_id
+        ))
     }
 
     pub async fn query(&self, query_str: &str, top_k: usize) -> Result<VectorStoreQueryResult> {

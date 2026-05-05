@@ -2,13 +2,15 @@ use serde::{Deserialize, Serialize};
 use crate::core::schema::Node;
 use half::f16;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub enum FilterOperator {
+    #[default]
     Eq, Gt, Lt, Ne, In, TextMatch,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub enum FilterCondition {
+    #[default]
     And, Or, Not,
 }
 
@@ -19,18 +21,19 @@ pub struct MetadataFilter {
     pub operator: FilterOperator,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct MetadataFilters {
     pub filters: Vec<MetadataFilter>,
     pub condition: FilterCondition,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub enum VectorStoreQueryMode {
+    #[default]
     Default, Sparse, Hybrid, Mmr,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct VectorStoreQuery {
     pub query_embedding: Option<Vec<f16>>,
     pub similarity_top_k: usize,

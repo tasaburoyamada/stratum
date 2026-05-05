@@ -109,3 +109,13 @@ impl VectorStore for SimpleVectorStore {
         Ok(())
     }
 }
+
+impl SimpleVectorStore {
+    pub fn load(path: &str) -> Result<Self> {
+        let bytes = std::fs::read(path)?;
+        let data: SimpleVectorStoreData = bincode::deserialize(&bytes)?;
+        Ok(Self {
+            data: RwLock::new(data),
+        })
+    }
+}

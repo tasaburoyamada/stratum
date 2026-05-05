@@ -40,6 +40,17 @@ impl CandleEmbedding {
             return Err(anyhow!("Config file not found at: {}", config_path));
         }
 
+        // Validate safetensors header to ensure it's not a garbage file
+        let mut file = std::fs::File::open(model_path)?;
+        use std::io::Read;
+        let mut header_buf = [0u8; 8];
+        file.read_exact(&mut header_buf).map_err(|_| anyhow!("Failed to read safetensors header"))?;
+        let header_size = u64::from_le_bytes(header_buf);
+        let file_metadata = std::fs::metadata(model_path)?;
+        if header_size == 0 || header_size > file_metadata.len() - 8 {
+            return Err(anyhow!("Invalid safetensors header size: {}", header_size));
+        }
+
         let config = std::fs::read_to_string(config_path)?;
         let config: Config = serde_json::from_str(&config)?;
         

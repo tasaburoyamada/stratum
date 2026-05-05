@@ -17,12 +17,14 @@ pub mod vector_stores {
     pub mod base;
     pub mod utils;
     pub mod simple;
-    pub mod lance;
+    pub mod native;
 }
+pub mod llm;
 pub mod readers {
     pub mod base;
     pub mod file;
     pub mod web;
+    pub mod json;
 }
 pub mod indices {
     pub mod vector_store;
@@ -33,6 +35,7 @@ pub mod node_parser {
 pub mod postprocessors {
     pub mod base;
     pub mod similarity;
+    pub mod keyword;
 }
 pub mod query_engine {
     pub mod retriever_query_engine;

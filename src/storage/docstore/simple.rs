@@ -99,3 +99,13 @@ impl DocumentStore for SimpleDocumentStore {
         Ok(())
     }
 }
+
+impl SimpleDocumentStore {
+    pub fn load(path: &str) -> Result<Self> {
+        let bytes = std::fs::read(path)?;
+        let data: SimpleDocStoreData = bincode::deserialize(&bytes)?;
+        Ok(Self {
+            data: RwLock::new(data),
+        })
+    }
+}

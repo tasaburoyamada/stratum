@@ -1,15 +1,11 @@
 use crate::core::schema::NodeWithScore;
 use crate::core::query_bundle::QueryBundle;
 use crate::synthesizers::base::{ResponseSynthesizer, DEFAULT_TEXT_QA_PROMPT, DEFAULT_REFINE_PROMPT};
+use crate::llm::LlmClient;
 use anyhow::Result;
 use async_trait::async_trait;
 use tiktoken_rs::{cl100k_base, CoreBPE};
 use std::sync::Arc;
-
-#[async_trait]
-pub trait LlmClient: Send + Sync {
-    async fn complete(&self, prompt: &str) -> Result<String>;
-}
 
 use crate::core::config::SynthesizerConfig;
 

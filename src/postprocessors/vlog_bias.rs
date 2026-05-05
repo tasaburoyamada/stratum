@@ -1,18 +1,23 @@
 use crate::core::schema::NodeWithScore;
 use crate::core::query_bundle::QueryBundle;
 use crate::postprocessors::base::NodePostprocessor;
+use crate::embeddings::base::Embedding;
+use crate::vector_stores::utils::cosine_similarity;
 use anyhow::Result;
 use async_trait::async_trait;
 use regex::Regex;
 use std::collections::HashMap;
+use std::sync::Arc;
+use half::f16;
 
 pub struct VlogBiasPostprocessor {
     pub bias: HashMap<String, f32>,
     pub concepts: Vec<String>,
+    pub embed_model: Option<Arc<dyn Embedding>>,
 }
 
 impl VlogBiasPostprocessor {
-    pub fn from_vlog(vlog_content: &str) -> Self {
+    pub fn from_vlog(vlog_content: &str, embed_model: Option<Arc<dyn Embedding>>) -> Self {
         let mut bias = HashMap::new();
         let mut concepts = Vec::new();
 
@@ -35,7 +40,7 @@ impl VlogBiasPostprocessor {
             concepts.push(caps[1].to_string());
         }
 
-        Self { bias, concepts }
+        Self { bias, concepts, embed_model }
     }
 }
 
@@ -44,21 +49,41 @@ impl NodePostprocessor for VlogBiasPostprocessor {
     async fn postprocess_nodes(&self, nodes: Vec<NodeWithScore>, _query_bundle: &QueryBundle) -> Result<Vec<NodeWithScore>> {
         let mut boosted_nodes = nodes;
 
+        // Pre-calculate concept embeddings if model is available
+        let mut concept_embeddings = Vec::new();
+        if let Some(model) = &self.embed_model {
+            for concept in &self.concepts {
+                if let Ok(emb) = model.get_text_embedding(concept).await {
+                    concept_embeddings.push(emb);
+                }
+            }
+        }
+
         for node in &mut boosted_nodes {
             let mut boost = 1.0;
             
+            // 1. Semantic Concept Boost
+            if !concept_embeddings.is_empty() {
+                if let Some(node_emb) = &node.node.embedding {
+                    for c_emb in &concept_embeddings {
+                        let sim = cosine_similarity(node_emb, c_emb);
+                        if sim > 0.7 { // Threshold for semantic relevance
+                            boost += (sim - 0.7) * 2.0; // Dynamic boost based on similarity
+                        }
+                    }
+                }
+            }
+
+            // 2. Fallback/Complementary Keyword Boost
             if let Ok(content) = node.node.get_content(None) {
                 let content_lower = content.to_lowercase();
-                
-                // 1. Concept Boost
                 for concept in &self.concepts {
                     if content_lower.contains(&concept.to_lowercase()) {
-                        boost += 0.2; // 20% boost per matching concept
+                        boost += 0.1; 
                     }
                 }
 
-                // 2. Metadata Bias Boost (e.g. genre or file type based on vlog priority)
-                // This is a placeholder for more complex semantic mapping
+                // 3. Metadata Bias Boost
                 if let Some(genre) = &node.node.metadata.genre {
                     if self.bias.contains_key(genre) {
                         boost += self.bias[genre] * 0.5;

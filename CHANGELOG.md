@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.0-dev] - 2026-05-06
+
+### Added
+- **Hierarchical Index (PageIndex)**: Implemented a recursive summarization-based index that enables semantic traversal without vector embeddings.
+- **HierarchicalRetriever**: A new retriever that performs top-down semantic search via LLM reasoning.
+
 ## [0.2.0] - 2026-05-06
 
 ### Added

@@ -28,6 +28,7 @@ pub mod readers {
 }
 pub mod indices {
     pub mod vector_store;
+    pub mod hierarchical;
 }
 pub mod node_parser {
     pub mod sentence_splitter;
@@ -47,6 +48,7 @@ pub mod synthesizers {
 pub mod retrievers {
     pub mod base;
     pub mod vector_store_retriever;
+    pub mod hierarchical_retriever;
 }
 pub mod storage {
     pub mod storage_context;

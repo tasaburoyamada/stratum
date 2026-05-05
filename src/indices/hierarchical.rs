@@ -64,49 +64,55 @@ impl HierarchicalIndex {
         storage_context.docstore.add_documents(current_level_nodes.clone(), true).await?;
         all_nodes.extend(current_level_nodes.clone());
 
-        // 2. Recursive summarization
-        // For simplicity in v0.1, we group by document if available, or just chunks of 5 nodes
+        // 2. Recursive summarization with semantic grouping
         while current_level_nodes.len() > 1 {
             let mut next_level_nodes = Vec::new();
-            let chunks = current_level_nodes.chunks(5); // Summary of every 5 nodes
+            
+            // Group by source (e.g. file_path) if available
+            let mut groups: HashMap<String, Vec<Node>> = HashMap::new();
+            for node in current_level_nodes {
+                let key = node.metadata.file_path.clone()
+                    .or(node.metadata.url.clone())
+                    .unwrap_or_else(|| "default_group".to_string());
+                groups.entry(key).or_insert_with(Vec::new).push(node);
+            }
 
-            for chunk in chunks {
-                if chunk.len() == 1 && next_level_nodes.len() > 0 {
-                    // Avoid single child if possible, but keep it simple for now
-                }
-                
-                let summary_node = Self::summarize_nodes(chunk, llm.clone()).await?;
-                
-                // Set Relationships
-                let mut rels = HashMap::new();
-                let children_info: Vec<RelatedNodeInfo> = chunk.iter().map(|n| {
-                    RelatedNodeInfo {
-                        node_id: n.id_.clone(),
-                        node_type: Some(NodeType::Text),
-                        metadata: n.metadata.clone(),
-                        hash: Some(n.hash()),
-                    }
-                }).collect();
-                rels.insert(NodeRelationship::Child, children_info);
-                
-                let mut summary_node = summary_node;
-                summary_node.relationships = rels;
-                
-                // Update children with Parent relationship
-                for child in chunk {
-                    let mut updated_child = child.clone();
-                    updated_child.relationships.entry(NodeRelationship::Parent)
-                        .or_insert_with(Vec::new)
-                        .push(RelatedNodeInfo {
-                            node_id: summary_node.id_.clone(),
+            for (_key, group_nodes) in groups {
+                let chunks = group_nodes.chunks(5);
+                for chunk in chunks {
+                    let summary_node = Self::summarize_nodes(chunk, llm.clone()).await?;
+                    
+                    // Set Relationships
+                    let mut rels = HashMap::new();
+                    let children_info: Vec<RelatedNodeInfo> = chunk.iter().map(|n| {
+                        RelatedNodeInfo {
+                            node_id: n.id_.clone(),
                             node_type: Some(NodeType::Text),
-                            metadata: summary_node.metadata.clone(),
-                            hash: Some(summary_node.hash()),
-                        });
-                    storage_context.docstore.add_documents(vec![updated_child], true).await?;
-                }
+                            metadata: n.metadata.clone(),
+                            hash: Some(n.hash()),
+                        }
+                    }).collect();
+                    rels.insert(NodeRelationship::Child, children_info);
+                    
+                    let mut summary_node = summary_node;
+                    summary_node.relationships = rels;
+                    
+                    // Update children with Parent relationship
+                    for child in chunk {
+                        let mut updated_child = child.clone();
+                        updated_child.relationships.entry(NodeRelationship::Parent)
+                            .or_insert_with(Vec::new)
+                            .push(RelatedNodeInfo {
+                                node_id: summary_node.id_.clone(),
+                                node_type: Some(NodeType::Text),
+                                metadata: summary_node.metadata.clone(),
+                                hash: Some(summary_node.hash()),
+                            });
+                        storage_context.docstore.add_documents(vec![updated_child], true).await?;
+                    }
 
-                next_level_nodes.push(summary_node);
+                    next_level_nodes.push(summary_node);
+                }
             }
             
             storage_context.docstore.add_documents(next_level_nodes.clone(), true).await?;

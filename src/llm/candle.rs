@@ -54,7 +54,6 @@ pub struct CandleLlm {
     tokenizer: Tokenizer,
     model: Arc<Mutex<Llama>>,
     cache: Arc<Mutex<Cache>>,
-    model_name: String,
 }
 
 impl CandleLlm {
@@ -84,7 +83,6 @@ impl CandleLlm {
             tokenizer,
             model: Arc::new(Mutex::new(llama)),
             cache: Arc::new(Mutex::new(cache)),
-            model_name: "llama".to_string(),
         })
     }
 }
@@ -92,7 +90,7 @@ impl CandleLlm {
 #[async_trait]
 impl LlmClient for CandleLlm {
     async fn complete(&self, prompt: &str) -> Result<String> {
-        let mut model = self.model.lock().map_err(|_| anyhow!("Model lock poisoned"))?;
+        let model = self.model.lock().map_err(|_| anyhow!("Model lock poisoned"))?;
         let mut cache = self.cache.lock().map_err(|_| anyhow!("Cache lock poisoned"))?;
         
         let tokens = self.tokenizer.encode(prompt, true)

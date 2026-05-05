@@ -39,6 +39,7 @@ pub mod postprocessors {
     pub mod base;
     pub mod similarity;
     pub mod keyword;
+    pub mod vlog_bias;
 }
 pub mod query_engine {
     pub mod retriever_query_engine;

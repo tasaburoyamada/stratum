@@ -27,6 +27,7 @@ pub mod readers {
     pub mod json;
     pub mod pdf;
 }
+pub mod feeding;
 pub mod indices {
     pub mod vector_store;
     pub mod hierarchical;

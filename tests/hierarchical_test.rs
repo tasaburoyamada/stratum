@@ -58,3 +58,36 @@ async fn test_hierarchical_index_end_to_end() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[tokio::test]
+async fn test_hierarchical_index_persistence() -> anyhow::Result<()> {
+    use tempfile::tempdir;
+    let dir = tempdir()?;
+    let persist_dir = dir.path().to_str().unwrap();
+    let llm = Arc::new(MockHierarchicalLlm);
+    let mut index_id = String::new();
+
+    {
+        let storage_context = StorageContext::from_defaults();
+        let nodes = vec![
+            Node::new_text("Persistent context A".to_string()),
+            Node::new_text("Persistent context B".to_string()),
+        ];
+        let index = HierarchicalIndex::from_nodes(nodes, storage_context.clone(), llm.clone()).await?;
+        index_id = index.index_id.clone();
+        storage_context.persist(persist_dir).await?;
+    }
+
+    // Re-load
+    {
+        let storage_context = StorageContext::from_dir(persist_dir)?;
+        let index = HierarchicalIndex::from_storage_context_async(storage_context, llm.clone(), index_id).await?;
+        assert!(!index.root_node_ids.is_empty());
+        
+        let retriever = HierarchicalRetriever::new(Arc::new(index), 1);
+        let results = retriever.retrieve(QueryBundle::new("Persistent query".to_string())).await?;
+        assert!(!results.is_empty());
+    }
+
+    Ok(())
+}

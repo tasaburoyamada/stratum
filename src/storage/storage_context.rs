@@ -9,6 +9,7 @@ use anyhow::Result;
 use std::sync::Arc;
 use std::path::Path;
 
+#[derive(Clone)]
 pub struct StorageContext {
     pub docstore: Arc<dyn DocumentStore>,
     pub vector_store: Arc<dyn VectorStore>,

@@ -9,6 +9,8 @@ pub struct IndexStruct {
     pub index_id: String,
     pub summary: Option<String>,
     pub nodes_dict: HashMap<String, String>, // node_id -> doc_id
+    #[serde(default)]
+    pub extra: HashMap<String, serde_json::Value>,
 }
 
 #[async_trait]
@@ -45,7 +47,7 @@ impl IndexStore for SimpleIndexStore {
 
     async fn persist(&self, path: &str) -> Result<()> {
         let data = self.data.read().map_err(|_| anyhow::anyhow!("ERR_LOCK_POISONED"))?;
-        let encoded: Vec<u8> = bincode::serialize(&*data)?;
+        let encoded = serde_json::to_vec(&*data)?;
         
         let tmp_path = format!("{}.tmp", path);
         std::fs::write(&tmp_path, encoded)?;
@@ -58,7 +60,7 @@ impl IndexStore for SimpleIndexStore {
 impl SimpleIndexStore {
     pub fn load(path: &str) -> Result<Self> {
         let bytes = std::fs::read(path)?;
-        let data: HashMap<String, IndexStruct> = bincode::deserialize(&bytes)?;
+        let data: HashMap<String, IndexStruct> = serde_json::from_slice(&bytes)?;
         Ok(Self {
             data: RwLock::new(data),
         })

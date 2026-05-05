@@ -28,6 +28,27 @@ impl HierarchicalIndex {
         }
     }
 
+    pub async fn from_storage_context_async(
+        storage_context: StorageContext,
+        llm: Arc<dyn LlmClient>,
+        index_id: String,
+    ) -> Result<Self> {
+        let index_struct = storage_context.index_store.get_index_struct(&index_id).await?
+            .ok_or_else(|| anyhow::anyhow!("Index {} not found in index store", index_id))?;
+        
+        let roots_val = index_struct.extra.get("root_node_ids")
+            .ok_or_else(|| anyhow::anyhow!("root_node_ids not found in index metadata"))?;
+        
+        let root_node_ids: Vec<String> = serde_json::from_value(roots_val.clone())?;
+
+        Ok(Self {
+            storage_context,
+            llm,
+            root_node_ids,
+            index_id,
+        })
+    }
+
     pub async fn from_nodes(
         nodes: Vec<Node>,
         storage_context: StorageContext,
@@ -105,10 +126,14 @@ impl HierarchicalIndex {
             node_ids_dict.insert(n.id_.clone(), n.id_.clone());
         }
 
+        let mut extra = HashMap::new();
+        extra.insert("root_node_ids".to_string(), serde_json::to_value(&root_node_ids)?);
+
         let index_struct = IndexStruct {
             index_id: index_id.clone(),
             summary: Some("Hierarchical Index (PageIndex)".to_string()),
             nodes_dict: node_ids_dict,
+            extra,
         };
         storage_context.index_store.add_index_struct(index_struct).await?;
 

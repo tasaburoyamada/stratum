@@ -87,6 +87,7 @@ impl VectorStoreIndex {
             index_id: index_id.clone(),
             summary: Some("Vector Store Index".to_string()),
             nodes_dict: node_ids_dict,
+            extra: std::collections::HashMap::new(),
         };
         storage_context.index_store.add_index_struct(index_struct).await?;
 

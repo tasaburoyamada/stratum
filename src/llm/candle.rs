@@ -2,11 +2,11 @@ use crate::llm::base::LlmClient;
 use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use candle_core::{Device, Tensor, DType};
-use candle_transformers::generation::LogitsProcessor;
 use candle_transformers::models::llama::{Llama, LlamaEosToks, Cache};
 use tokenizers::Tokenizer;
 use std::sync::{Arc, Mutex};
 use serde::Deserialize;
+use futures::stream::{self, BoxStream, StreamExt};
 
 #[derive(Deserialize)]
 struct LlamaConfig {
@@ -90,40 +90,69 @@ impl CandleLlm {
 #[async_trait]
 impl LlmClient for CandleLlm {
     async fn complete(&self, prompt: &str) -> Result<String> {
-        let model = self.model.lock().map_err(|_| anyhow!("Model lock poisoned"))?;
-        let mut cache = self.cache.lock().map_err(|_| anyhow!("Cache lock poisoned"))?;
-        
-        let tokens = self.tokenizer.encode(prompt, true)
-            .map_err(|e| anyhow!("Tokenizer error: {}", e))?;
-        let prompt_tokens = tokens.get_ids();
-        
-        let mut tokens = prompt_tokens.to_vec();
-        let mut logits_processor = LogitsProcessor::new(299792458, Some(0.7), None);
-
-        let mut generated_text = String::new();
-        let max_gen_len = 512;
-
-        for index in 0..max_gen_len {
-            let context_size = if index > 0 { 1 } else { tokens.len() };
-            let start_pos = tokens.len().saturating_sub(context_size);
-            let input = Tensor::new(&tokens[start_pos..], &self.device)?.unsqueeze(0)?;
-            let logits = model.forward(&input, start_pos, &mut cache)?;
-            let logits = logits.squeeze(0)?;
-            let logits = logits.get(logits.dim(0)? - 1)?;
-            let token = logits_processor.sample(&logits)?;
-            tokens.push(token);
-
-            if let Some(t) = self.tokenizer.id_to_token(token) {
-                let s = t.replace(' ', " ").replace("<0x0A>", "\n");
-                generated_text.push_str(&s);
-            }
-
-            if token == 2 { 
-                break;
-            }
+        let mut stream = self.stream_complete(prompt);
+        let mut full_text = String::new();
+        while let Some(chunk) = stream.next().await {
+            full_text.push_str(&chunk?);
         }
+        Ok(full_text)
+    }
 
-        Ok(generated_text)
+    fn stream_complete(&self, prompt: &str) -> BoxStream<'static, Result<String>> {
+        let prompt = prompt.to_string();
+        let device = self.device.clone();
+        let tokenizer = self.tokenizer.clone();
+        let model = self.model.clone();
+        let cache = self.cache.clone();
+
+        let s = stream::unfold(
+            (0, vec![], true), // (index, current_tokens, first_run)
+            move |(index, mut tokens, first_run)| {
+                let model = model.clone();
+                let cache = cache.clone();
+                let tokenizer = tokenizer.clone();
+                let device = device.clone();
+                let prompt = prompt.clone();
+
+                async move {
+                    if index >= 512 { return None; }
+
+                    let mut model = model.lock().ok()?;
+                    let mut cache = cache.lock().ok()?;
+
+                    if first_run {
+                        let t = tokenizer.encode(prompt, true).ok()?;
+                        tokens = t.get_ids().to_vec();
+                    }
+
+                    let context_size = if !first_run { 1 } else { tokens.len() };
+                    let start_pos = tokens.len().saturating_sub(context_size);
+                    
+                    let input = Tensor::new(&tokens[start_pos..], &device).ok()?.unsqueeze(0).ok()?;
+                    let logits = model.forward(&input, start_pos, &mut cache).ok()?;
+                    let logits = logits.squeeze(0).ok()?;
+                    let logits = logits.get(logits.dim(0).ok()? - 1).ok()?;
+                    
+                    // Simple sampling (greedy for now)
+                    let pr: Vec<f32> = logits.to_vec1::<f32>().ok()?;
+                    let token = pr.iter().enumerate()
+                        .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+                        .map(|(idx, _)| idx as u32)?;
+
+                    tokens.push(token);
+
+                    if token == 2 { return None; } // EOS
+
+                    let text = tokenizer.id_to_token(token)?
+                        .replace(' ', " ")
+                        .replace("<0x0A>", "\n");
+
+                    Some((Ok(text), (index + 1, tokens, false)))
+                }
+            }
+        );
+
+        s.boxed()
     }
 
     fn clone_box(&self) -> Box<dyn LlmClient> {

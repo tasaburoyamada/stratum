@@ -27,6 +27,7 @@ pub mod readers {
     pub mod web;
     pub mod json;
     pub mod pdf;
+    pub mod markdown;
 }
 pub mod feeding;
 pub mod evaluation;

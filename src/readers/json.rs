@@ -4,6 +4,7 @@ use anyhow::Result;
 use futures::stream::{self, BoxStream, StreamExt};
 use std::path::PathBuf;
 
+/// A reader for JSON files that can extract structured data into Node metadata.
 pub struct JsonReader {
     pub file_path: PathBuf,
 }
@@ -11,6 +12,28 @@ pub struct JsonReader {
 impl JsonReader {
     pub fn new(file_path: PathBuf) -> Self {
         Self { file_path }
+    }
+
+    fn value_to_node(v: &serde_json::Value) -> Node {
+        let mut node = if let Some(text) = v.get("text").and_then(|t| t.as_str()) {
+            Node::new_text(text.to_string())
+        } else if let Some(content) = v.get("content").and_then(|c| c.as_str()) {
+            Node::new_text(content.to_string())
+        } else if v.is_string() {
+            Node::new_text(v.as_str().unwrap().to_string())
+        } else {
+            Node::new_text(v.to_string())
+        };
+
+        // Automatically map other fields to metadata
+        if let Some(obj) = v.as_object() {
+            for (key, val) in obj {
+                if key != "text" && key != "content" {
+                    node.metadata.extra.insert(key.clone(), val.clone());
+                }
+            }
+        }
+        node
     }
 }
 
@@ -23,20 +46,12 @@ impl Reader for JsonReader {
             let value: serde_json::Value = serde_json::from_str(&content)?;
             
             if let Some(arr) = value.as_array() {
-                // Return nodes from array
                 let nodes: Vec<Result<Node>> = arr.iter().map(|v| {
-                    let text = if v.is_string() {
-                        v.as_str().unwrap().to_string()
-                    } else {
-                        v.to_string()
-                    };
-                    Ok(Node::new_text(text))
+                    Ok(Self::value_to_node(v))
                 }).collect();
                 Ok(nodes)
             } else {
-                // Return single node
-                let node = Node::new_text(value.to_string());
-                Ok(vec![Ok(node)])
+                Ok(vec![Ok(Self::value_to_node(&value))])
             }
         })
         .flat_map(|res| {

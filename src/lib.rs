@@ -2,6 +2,7 @@ pub mod core {
     pub mod schema;
     pub mod query_bundle;
     pub mod config;
+    pub mod error;
     pub mod ingestion {
         pub mod transformation;
         pub mod pipeline;

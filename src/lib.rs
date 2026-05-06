@@ -29,6 +29,7 @@ pub mod readers {
 }
 pub mod feeding;
 pub mod evaluation;
+pub mod extractors;
 pub mod indices {
     pub mod vector_store;
     pub mod hierarchical;

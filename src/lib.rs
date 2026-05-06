@@ -63,6 +63,7 @@ pub mod storage {
         pub mod base;
         pub mod types;
         pub mod simple;
+        pub mod redb_docstore;
     }
 }
 pub mod research { pub mod selector_v1; }

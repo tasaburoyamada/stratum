@@ -1,7 +1,7 @@
 use crate::storage::index_store::base::{IndexStore, IndexStruct};
 use anyhow::Result;
 use async_trait::async_trait;
-use redb::{Database, TableDefinition, ReadableTable};
+use redb::{Database, TableDefinition};
 use std::sync::Arc;
 
 const INDEX_TABLE: TableDefinition<&str, Vec<u8>> = TableDefinition::new("indexes");

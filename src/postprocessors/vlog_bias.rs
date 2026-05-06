@@ -8,7 +8,6 @@ use async_trait::async_trait;
 use regex::Regex;
 use std::collections::HashMap;
 use std::sync::Arc;
-use half::f16;
 
 pub struct VlogBiasPostprocessor {
     pub bias: HashMap<String, f32>,

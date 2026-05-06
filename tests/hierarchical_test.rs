@@ -80,7 +80,8 @@ async fn test_hierarchical_index_persistence() -> anyhow::Result<()> {
             Node::new_text("Persistent context B".to_string()),
         ];
         let index = HierarchicalIndex::from_nodes(nodes, storage_context.clone(), llm.clone()).await?;
-        index_id = index.index_id.clone();
+        let _id = index.index_id.clone();
+        index_id = _id.clone();
         storage_context.persist(persist_dir).await?;
     }
 

@@ -7,9 +7,11 @@ use hnsw_rs::prelude::*;
 use redb::{Database, TableDefinition, ReadableTable};
 use std::sync::{Arc, RwLock};
 
-const NODES_TABLE: TableDefinition<&str, Vec<u8>> = TableDefinition::new("nodes");
+// Optimization: Store embeddings separately for faster index rebuild
+const EMBEDDINGS_TABLE: TableDefinition<&str, Vec<u8>> = TableDefinition::new("embeddings");
 const MAPPING_TABLE: TableDefinition<u64, &str> = TableDefinition::new("mapping");
 const REVERSE_MAPPING_TABLE: TableDefinition<&str, u64> = TableDefinition::new("reverse_mapping");
+const NODES_TABLE: TableDefinition<&str, Vec<u8>> = TableDefinition::new("nodes");
 
 pub struct NativeVectorStore {
     db: Database,
@@ -25,9 +27,10 @@ impl NativeVectorStore {
         {
             let write_txn = db.begin_write()?;
             {
-                let _ = write_txn.open_table(NODES_TABLE)?;
+                let _ = write_txn.open_table(EMBEDDINGS_TABLE)?;
                 let _ = write_txn.open_table(MAPPING_TABLE)?;
                 let _ = write_txn.open_table(REVERSE_MAPPING_TABLE)?;
+                let _ = write_txn.open_table(NODES_TABLE)?;
             }
             write_txn.commit()?;
         }
@@ -43,19 +46,17 @@ impl NativeVectorStore {
 
     fn rebuild_index(&self) -> Result<()> {
         let read_txn = self.db.begin_read()?;
-        let nodes_table = read_txn.open_table(NODES_TABLE)?;
+        let embeddings_table = read_txn.open_table(EMBEDDINGS_TABLE)?;
         let reverse_table = read_txn.open_table(REVERSE_MAPPING_TABLE)?;
         let hnsw = self.hnsw.write().unwrap();
 
-        for result in nodes_table.iter()? {
-            let (id, node_bytes) = result?;
-            let node: Node = bincode::deserialize(node_bytes.value().as_slice())?;
-            if let Some(embedding) = node.embedding {
-                let f32_emb: Vec<f32> = embedding.iter().map(|&x| f32::from(x)).collect();
-                
-                if let Some(inner_id) = reverse_table.get(id.value())? {
-                    hnsw.insert((&f32_emb, inner_id.value() as usize));
-                }
+        for result in embeddings_table.iter()? {
+            let (id, emb_bytes) = result?;
+            let embedding: Vec<half::f16> = bincode::deserialize(emb_bytes.value().as_slice())?;
+            let f32_emb: Vec<f32> = embedding.iter().map(|&x| f32::from(x)).collect();
+            
+            if let Some(inner_id) = reverse_table.get(id.value())? {
+                hnsw.insert((&f32_emb, inner_id.value() as usize));
             }
         }
         Ok(())
@@ -69,12 +70,12 @@ impl VectorStore for NativeVectorStore {
         let mut ids = Vec::new();
 
         {
-            let mut nodes_table = write_txn.open_table(NODES_TABLE)?;
+            let mut emb_table = write_txn.open_table(EMBEDDINGS_TABLE)?;
             let mut mapping_table = write_txn.open_table(MAPPING_TABLE)?;
             let mut reverse_table = write_txn.open_table(REVERSE_MAPPING_TABLE)?;
+            let mut nodes_table = write_txn.open_table(NODES_TABLE)?;
             let hnsw = self.hnsw.write().unwrap();
 
-            // Find current max ID for auto-increment
             let mut next_id = 0;
             if let Some(last) = mapping_table.iter()?.rev().next() {
                 next_id = last?.0.value() + 1;
@@ -87,8 +88,10 @@ impl VectorStore for NativeVectorStore {
                     }
 
                     let node_id = node.id_.clone();
+                    let emb_bytes = bincode::serialize(&embedding)?;
                     let node_bytes = bincode::serialize(&node)?;
                     
+                    emb_table.insert(node_id.as_str(), emb_bytes)?;
                     nodes_table.insert(node_id.as_str(), node_bytes)?;
                     mapping_table.insert(next_id, node_id.as_str())?;
                     reverse_table.insert(node_id.as_str(), next_id)?;
@@ -109,12 +112,14 @@ impl VectorStore for NativeVectorStore {
     async fn delete(&self, node_id: &str) -> Result<()> {
         let write_txn = self.db.begin_write()?;
         {
+            let mut emb_table = write_txn.open_table(EMBEDDINGS_TABLE)?;
             let mut nodes_table = write_txn.open_table(NODES_TABLE)?;
             let mut reverse_table = write_txn.open_table(REVERSE_MAPPING_TABLE)?;
             let mut mapping_table = write_txn.open_table(MAPPING_TABLE)?;
 
             let inner_id = reverse_table.get(node_id)?.map(|g| g.value());
             if let Some(id) = inner_id {
+                emb_table.remove(node_id)?;
                 nodes_table.remove(node_id)?;
                 mapping_table.remove(id)?;
                 reverse_table.remove(node_id)?;
@@ -125,17 +130,10 @@ impl VectorStore for NativeVectorStore {
     }
 
     async fn query(&self, query: VectorStoreQuery) -> Result<VectorStoreQueryResult> {
-        let query_embedding = query.query_embedding.ok_or_else(|| anyhow::anyhow!("Query embedding missing"))?;
+        let query_embedding = query.query_embedding.ok_or_else(|| anyhow::anyhow!("ERR_VS_QUERY_EMBEDDING_MISSING"))?;
         let f32_query: Vec<f32> = query_embedding.iter().map(|&x| f32::from(x)).collect();
 
-        // 1. Vector Search (HNSW)
-        // We take more than top_k to allow for filtering
-        let search_k = if query.filters.is_some() {
-            query.similarity_top_k * 5
-        } else {
-            query.similarity_top_k
-        };
-
+        let search_k = if query.filters.is_some() { query.similarity_top_k * 5 } else { query.similarity_top_k };
         let hnsw = self.hnsw.read().unwrap();
         let neighbors = hnsw.search(&f32_query, search_k, 200);
 
@@ -148,24 +146,19 @@ impl VectorStore for NativeVectorStore {
         let mut count = 0;
 
         for neighbor in neighbors {
-            if count >= query.similarity_top_k {
-                break;
-            }
+            if count >= query.similarity_top_k { break; }
 
             let inner_id = neighbor.d_id as u64;
             if let Some(node_id) = mapping_table.get(inner_id)? {
                 let node_id_str = node_id.value();
                 
-                // Apply Filters
                 if let Some(filters) = &query.filters {
                     if let Some(node_bytes) = nodes_table.get(node_id_str)? {
                         let node: Node = bincode::deserialize(node_bytes.value().as_slice())?;
                         if !crate::vector_stores::utils::filter_metadata(&node.metadata, &filters.filters, &filters.condition) {
                             continue;
                         }
-                    } else {
-                        continue;
-                    }
+                    } else { continue; }
                 }
 
                 ids.push(node_id_str.to_string());

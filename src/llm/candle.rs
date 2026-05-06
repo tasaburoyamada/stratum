@@ -117,7 +117,7 @@ impl LlmClient for CandleLlm {
                 async move {
                     if index >= 512 { return None; }
 
-                    let mut model = model.lock().ok()?;
+                    let model = model.lock().ok()?;
                     let mut cache = cache.lock().ok()?;
 
                     if first_run {

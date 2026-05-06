@@ -1,6 +1,6 @@
 use crate::indices::hierarchical::selector::NodeSelector;
 use crate::llm::LlmClient;
-use crate::core::schema::{Node, NodeRelationship};
+use crate::core::schema::Node;
 use async_trait::async_trait;
 use anyhow::Result;
 use std::sync::Arc;

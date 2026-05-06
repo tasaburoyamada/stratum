@@ -5,6 +5,7 @@ pub mod core {
     pub mod ingestion {
         pub mod transformation;
         pub mod pipeline;
+        pub mod cache;
     }
 }
 pub mod embeddings {

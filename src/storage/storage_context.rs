@@ -3,7 +3,7 @@ use crate::storage::index_store::IndexStore;
 use crate::vector_stores::base::VectorStore;
 use crate::storage::docstore::simple::SimpleDocumentStore;
 use crate::storage::docstore::redb_docstore::RedbDocumentStore;
-use crate::storage::index_store::SimpleIndexStore;
+use crate::storage::index_store::{SimpleIndexStore, RedbIndexStore};
 use crate::vector_stores::simple::SimpleVectorStore;
 use crate::vector_stores::native::NativeVectorStore;
 use anyhow::Result;
@@ -42,6 +42,7 @@ impl StorageContext {
         let docstore_path = format!("{}/docstore.bin", persist_dir);
         let redb_docstore_path = format!("{}/docstore.redb", persist_dir);
         let index_store_path = format!("{}/index_store.bin", persist_dir);
+        let redb_index_store_path = format!("{}/index_store.redb", persist_dir);
         let vector_store_path = format!("{}/vector_store.bin", persist_dir);
         let native_db_path = format!("{}/native_db.redb", persist_dir);
 
@@ -50,16 +51,15 @@ impl StorageContext {
         } else if Path::new(&docstore_path).exists() {
             Arc::new(SimpleDocumentStore::load(&docstore_path)?) as Arc<dyn DocumentStore>
         } else {
-            // Default to Simple for memory-only if no directory exists? 
-            // Or default to Redb if we want full ACID by default.
-            // Let's use Redb if a directory is provided.
             Arc::new(RedbDocumentStore::new(&redb_docstore_path)?) as Arc<dyn DocumentStore>
         };
 
-        let index_store = if Path::new(&index_store_path).exists() {
+        let index_store = if Path::new(&redb_index_store_path).exists() {
+            Arc::new(RedbIndexStore::new(&redb_index_store_path)?) as Arc<dyn IndexStore>
+        } else if Path::new(&index_store_path).exists() {
             Arc::new(SimpleIndexStore::load(&index_store_path)?) as Arc<dyn IndexStore>
         } else {
-            Arc::new(SimpleIndexStore::new()) as Arc<dyn IndexStore>
+            Arc::new(RedbIndexStore::new(&redb_index_store_path)?) as Arc<dyn IndexStore>
         };
 
         let vector_store = if Path::new(&native_db_path).exists() {
@@ -80,9 +80,8 @@ impl StorageContext {
     pub async fn persist(&self, persist_dir: &str) -> Result<()> {
         std::fs::create_dir_all(persist_dir)?;
         
-        // Redb stores persist automatically on commit, but we call these to ensure logic is triggered
         self.docstore.persist(&format!("{}/docstore.redb", persist_dir)).await?;
-        self.index_store.persist(&format!("{}/index_store.bin", persist_dir)).await?;
+        self.index_store.persist(&format!("{}/index_store.redb", persist_dir)).await?;
         self.vector_store.persist(&format!("{}/native_db.redb", persist_dir)).await?;
         
         Ok(())

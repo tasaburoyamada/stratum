@@ -43,8 +43,26 @@ impl SemanticSplitter {
             return distances;
         }
 
-        for i in 0..embeddings.len() - 1 {
-            let dist = 1.0 - cosine_similarity_f32(&embeddings[i], &embeddings[i+1]);
+        let mut combined_embeddings = Vec::new();
+        for i in 0..embeddings.len() {
+            let start = i.saturating_sub(self.buffer_size);
+            let end = (i + self.buffer_size).min(embeddings.len() - 1);
+            
+            let mut avg_emb = vec![0.0; embeddings[0].len()];
+            let count = (end - start + 1) as f32;
+            for j in start..=end {
+                for k in 0..avg_emb.len() {
+                    avg_emb[k] += embeddings[j][k];
+                }
+            }
+            for k in 0..avg_emb.len() {
+                avg_emb[k] /= count;
+            }
+            combined_embeddings.push(avg_emb);
+        }
+
+        for i in 0..combined_embeddings.len() - 1 {
+            let dist = 1.0 - cosine_similarity_f32(&combined_embeddings[i], &combined_embeddings[i+1]);
             distances.push(dist);
         }
         distances
@@ -119,5 +137,54 @@ impl Transformation for SemanticSplitter {
 
     fn hash(&self) -> String {
         format!("semantic_splitter_{}", self.breakpoint_percentile_threshold)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::embeddings::base::Embedding;
+    use async_trait::async_trait;
+    use anyhow::Result;
+    use half::f16;
+
+    #[derive(Debug)]
+    struct DummyEmbedding;
+    #[async_trait]
+    impl Embedding for DummyEmbedding {
+        async fn get_text_embedding(&self, _text: &str) -> Result<Vec<f16>> { Ok(vec![]) }
+        async fn get_text_embedding_batch(&self, _texts: Vec<String>, _batch_size: usize) -> Result<Vec<Vec<f16>>> { Ok(vec![]) }
+        fn model_name(&self) -> &str { "dummy" }
+    }
+
+    #[test]
+    fn test_calculate_distances_with_buffer() {
+        let splitter = SemanticSplitter {
+            embed_model: Arc::new(DummyEmbedding),
+            buffer_size: 1,
+            breakpoint_percentile_threshold: 95.0,
+            sentence_regex: Regex::new(r"[^.!?。！？]+[.!?。！？]?").unwrap(),
+        };
+
+        // Create 4 dummy embeddings
+        let embeddings = vec![
+            vec![1.0, 0.0],
+            vec![1.0, 0.0],
+            vec![0.0, 1.0], // Sudden change
+            vec![0.0, 1.0],
+        ];
+
+        let distances = splitter.calculate_distances(&embeddings);
+        
+        // Expected buffer (size 1) averages:
+        // avg[0] (0..1): [1.0, 0.0]
+        // avg[1] (0..2): [2.0/3.0, 1.0/3.0]
+        // avg[2] (1..3): [1.0/3.0, 2.0/3.0]
+        // avg[3] (2..3): [0.0, 1.0]
+        
+        assert_eq!(distances.len(), 3);
+        // Distances should be larger in the middle where the semantic shift happens
+        assert!(distances[1] > distances[0]);
+        assert!(distances[1] > distances[2]);
     }
 }

@@ -10,9 +10,9 @@ struct MockEvalLlm;
 impl LlmClient for MockEvalLlm {
     async fn complete(&self, prompt: &str) -> anyhow::Result<String> {
         if prompt.contains("Faithfulness") {
-            Ok("Score: 0.9\nFeedback: The response is mostly supported.\nPassing: YES".to_string())
+            Ok(r#"{"score": 0.9, "feedback": "The response is mostly supported.", "passing": true}"#.to_string())
         } else {
-            Ok("Score: 0.8\nFeedback: Relevant answer.\nPassing: YES".to_string())
+            Ok(r#"{"score": 0.8, "feedback": "Relevant answer.", "passing": true}"#.to_string())
         }
     }
 

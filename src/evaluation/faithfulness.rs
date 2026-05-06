@@ -28,30 +28,39 @@ impl BaseEvaluator for FaithfulnessEvaluator {
             Context:\n{}\n\n\
             Response to Evaluate:\n{}\n\n\
             Criteria: Is the response entirely supported by the provided context? Does it contain any information NOT present in the context?\n\n\
-            Respond in the following format:\n\
-            Score: [0.0 to 1.0]\n\
-            Feedback: [Brief explanation]\n\
-            Passing: [YES/NO]",
+            Respond ONLY with a valid JSON object matching this schema:\n\
+            {{\n\
+              \"score\": <float between 0.0 and 1.0>,\n\
+              \"feedback\": \"<brief explanation>\",\n\
+              \"passing\": <boolean>\n\
+            }}",
             combined_context,
             response
         );
 
         let eval_raw = self.llm.complete(&prompt).await?;
         
-        // Simple parsing
-        let mut score = 0.0;
-        let mut feedback = String::new();
-        let mut passing = false;
-
-        for line in eval_raw.lines() {
-            if line.starts_with("Score:") {
-                score = line.replace("Score:", "").trim().parse().unwrap_or(0.0);
-            } else if line.starts_with("Feedback:") {
-                feedback = line.replace("Feedback:", "").trim().to_string();
-            } else if line.starts_with("Passing:") {
-                passing = line.to_uppercase().contains("YES");
+        let json_str = if let Some(start) = eval_raw.find('{') {
+            if let Some(end) = eval_raw.rfind('}') {
+                &eval_raw[start..=end]
+            } else {
+                &eval_raw
             }
-        }
+        } else {
+            &eval_raw
+        };
+
+        let result: serde_json::Value = serde_json::from_str(json_str).unwrap_or_else(|_| {
+            serde_json::json!({
+                "score": 0.0,
+                "feedback": "Failed to parse LLM response as JSON",
+                "passing": false
+            })
+        });
+
+        let score = result.get("score").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+        let feedback = result.get("feedback").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let passing = result.get("passing").and_then(|v| v.as_bool()).unwrap_or(false);
 
         Ok(EvaluationResult { score, feedback, passing })
     }

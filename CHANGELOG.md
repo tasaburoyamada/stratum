@@ -47,3 +47,15 @@ All notable changes to this project will be documented in this file.
 ## [0.1.0] - 2026-04-28
 - Initial internal release.
 - Basic RAG pipeline implementation.
+
+## [0.4.0-dev.2] - 2026-05-06
+### Added
+- Added unit tests for `SemanticSplitter` to verify buffer-based distance calculations.
+- Added unit tests for `VlogBiasPostprocessor` to verify metadata parsing and score boosting.
+
+### Changed
+- Improved robustness of `FaithfulnessEvaluator` and `RelevancyEvaluator` by enforcing strict JSON output schemas from LLMs, replacing fragile string-matching parsers.
+- Refactored `VlogBiasPostprocessor` to use `std::sync::OnceLock` for Regex compilation, eliminating runtime panic risks from `unwrap()$.
+
+### Fixed
+- Fixed `SemanticSplitter` implementation to correctly utilize the `buffer_size` parameter. It now calculates the moving average of embeddings within the buffer window before computing distances, improving resilience to semantic noise during chunking.

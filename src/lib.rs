@@ -37,6 +37,7 @@ pub mod indices {
 pub mod node_parser {
     pub mod sentence_splitter;
     pub mod semantic_splitter;
+    pub mod refinery;
 }
 pub mod postprocessors {
     pub mod base;

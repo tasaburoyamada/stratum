@@ -16,7 +16,8 @@ This file tracks tasks and their status, mapped to Gitea issues.
 | #10 | Robust RAG Storage in Lasada | Completed | develop | Move RAG state to StratumRAG bridge and implement proper persistence. |
 | #11 | RAG Evaluation Module | Completed | develop | Implement Faithfulness and Relevancy evaluators. |
 | #12 | Semantic Chunking Parser | Completed | develop | Implement intelligent content splitting based on embedding shifts. |
-| #13 | Salesforce Exam Ingestion | To Do | feature/13-salesforce-exam | Implement a dedicated reader or JSONL ingestion flow for Salesforce exam data. |
+| #13 | Salesforce Exam Ingestion | Completed | develop | Implement a dedicated reader or JSONL ingestion flow for Salesforce exam data. |
+| #14 | Hybrid LLM Support (OpenAI API) | Completed | develop | Implement an OpenAI-compatible client to support cloud-hosted models. |
 
 ## Issue #9: Dedicated Small Model Research
 - [x] Define MLP-based `VectorSelector` architecture in Candle.
@@ -25,19 +26,12 @@ This file tracks tasks and their status, mapped to Gitea issues.
 - [ ] Large-scale training and evaluation on captured data.
 - [ ] Integration into `HierarchicalRetriever` as an alternative to LLM.
 
-## Issue #11: RAG Evaluation Module
-- [x] Define `BaseEvaluator` trait and `EvaluationResult` schema.
-- [x] Implement `FaithfulnessEvaluator` (Hallucination detection).
-- [x] Implement `RelevancyEvaluator` (Query alignment).
-- [x] Add automated evaluation tests.
-
-## Issue #12: Semantic Chunking Parser
-- [x] Implement `SemanticSplitter` with dynamic boundary detection.
-- [x] Use cosine similarity between sentence embeddings to find breakpoints.
-- [x] Integrate into `Transformation` pipeline.
-
 ## Issue #13: Salesforce Exam Ingestion
-### Tasks:
-- [ ] Implement `SalesforceJsonReader` (specialized schema handling).
-- [ ] Add integration for NGA-captured raw visual data.
-- [ ] Test hybrid search with complex exam questions.
+- [x] Implement `RefineryParser` (LLM-based structured extraction).
+- [x] Integrate `DATA_SPEC.md` into ingestion pipeline.
+- [x] Enable NGA-to-RAG knowledge refinement path.
+
+## Issue #14: Hybrid LLM Support
+- [x] Implement `OpenAIClient` with streaming support.
+- [x] Support custom base URLs (Ollama/VLLM).
+- [x] Integrate into `LlmClient` trait architecture.

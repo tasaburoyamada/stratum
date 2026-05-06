@@ -14,6 +14,12 @@ pub trait DocumentStore: Send + Sync {
     async fn set_document_hash(&self, doc_id: &str, hash: &str) -> Result<()>;
     async fn get_document_hash(&self, doc_id: &str) -> Result<Option<String>>;
     async fn get_all_document_hashes(&self) -> Result<HashMap<String, String>>;
+
+    // RefDocInfo management
+    async fn get_ref_doc_info(&self, ref_doc_id: &str) -> Result<Option<super::types::RefDocInfo>>;
+    async fn set_ref_doc_info(&self, ref_doc_id: &str, ref_doc_info: super::types::RefDocInfo) -> Result<()>;
+    async fn delete_ref_doc_info(&self, ref_doc_id: &str) -> Result<()>;
+    async fn get_all_ref_doc_info(&self) -> Result<HashMap<String, super::types::RefDocInfo>>;
     
     async fn persist(&self, path: &str) -> Result<()>;
 }

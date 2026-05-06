@@ -1,5 +1,6 @@
 use crate::core::schema::Node;
 use crate::storage::docstore::base::DocumentStore;
+use crate::storage::docstore::types::RefDocInfo;
 use anyhow::Result;
 use async_trait::async_trait;
 use redb::{Database, TableDefinition, ReadableTable};
@@ -8,6 +9,7 @@ use std::sync::Arc;
 
 const DOCS_TABLE: TableDefinition<&str, Vec<u8>> = TableDefinition::new("docs");
 const HASH_TABLE: TableDefinition<&str, &str> = TableDefinition::new("hashes");
+const REF_DOC_INFO_TABLE: TableDefinition<&str, Vec<u8>> = TableDefinition::new("ref_doc_info");
 
 pub struct RedbDocumentStore {
     db: Arc<Database>,
@@ -23,6 +25,7 @@ impl RedbDocumentStore {
             {
                 let _ = write_txn.open_table(DOCS_TABLE)?;
                 let _ = write_txn.open_table(HASH_TABLE)?;
+                let _ = write_txn.open_table(REF_DOC_INFO_TABLE)?;
             }
             write_txn.commit()?;
         }
@@ -102,6 +105,50 @@ impl DocumentStore for RedbDocumentStore {
             hashes.insert(id.value().to_string(), hash.value().to_string());
         }
         Ok(hashes)
+    }
+
+    async fn get_ref_doc_info(&self, ref_doc_id: &str) -> Result<Option<RefDocInfo>> {
+        let read_txn = self.db.begin_read()?;
+        let table = read_txn.open_table(REF_DOC_INFO_TABLE)?;
+        if let Some(bytes) = table.get(ref_doc_id)? {
+            let info = serde_json::from_slice(bytes.value().as_slice())?;
+            Ok(Some(info))
+        } else {
+            Ok(None)
+        }
+    }
+
+    async fn set_ref_doc_info(&self, ref_doc_id: &str, ref_doc_info: RefDocInfo) -> Result<()> {
+        let write_txn = self.db.begin_write()?;
+        {
+            let mut table = write_txn.open_table(REF_DOC_INFO_TABLE)?;
+            let bytes = serde_json::to_vec(&ref_doc_info)?;
+            table.insert(ref_doc_id, bytes)?;
+        }
+        write_txn.commit()?;
+        Ok(())
+    }
+
+    async fn delete_ref_doc_info(&self, ref_doc_id: &str) -> Result<()> {
+        let write_txn = self.db.begin_write()?;
+        {
+            let mut table = write_txn.open_table(REF_DOC_INFO_TABLE)?;
+            table.remove(ref_doc_id)?;
+        }
+        write_txn.commit()?;
+        Ok(())
+    }
+
+    async fn get_all_ref_doc_info(&self) -> Result<HashMap<String, RefDocInfo>> {
+        let read_txn = self.db.begin_read()?;
+        let table = read_txn.open_table(REF_DOC_INFO_TABLE)?;
+        let mut infos = HashMap::new();
+        for result in table.iter()? {
+            let (id, bytes) = result?;
+            let info = serde_json::from_slice(bytes.value().as_slice())?;
+            infos.insert(id.value().to_string(), info);
+        }
+        Ok(infos)
     }
 
     async fn persist(&self, _path: &str) -> Result<()> {

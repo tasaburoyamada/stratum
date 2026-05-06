@@ -16,15 +16,9 @@ This file tracks tasks and their status, mapped to Gitea issues.
 | #10 | Robust RAG Storage in Lasada | Completed | develop | Move RAG state to StratumRAG bridge and implement proper persistence. |
 | #11 | RAG Evaluation Module | Completed | develop | Implement Faithfulness and Relevancy evaluators. |
 | #12 | Semantic Chunking Parser | Completed | develop | Implement intelligent content splitting based on embedding shifts. |
-
-## Issue #8: Intelligence Feeding
-- [x] Implement `feeding.rs` module in Stratum.
-- [x] Define `DatasetTriplet` and `SelectorTriplet` structures.
-- [x] Create a mechanism to capture and store these triplets during RAG operation.
-- [x] Implement export to JSONL format.
+| #13 | Salesforce Exam Ingestion | To Do | feature/13-salesforce-exam | Implement a dedicated reader or JSONL ingestion flow for Salesforce exam data. |
 
 ## Issue #9: Dedicated Small Model Research
-### Tasks:
 - [x] Define MLP-based `VectorSelector` architecture in Candle.
 - [x] Implement `SelectorTrainer` for intelligence distillation.
 - [x] Build research prototype script for training proof-of-concept.
@@ -41,3 +35,9 @@ This file tracks tasks and their status, mapped to Gitea issues.
 - [x] Implement `SemanticSplitter` with dynamic boundary detection.
 - [x] Use cosine similarity between sentence embeddings to find breakpoints.
 - [x] Integrate into `Transformation` pipeline.
+
+## Issue #13: Salesforce Exam Ingestion
+### Tasks:
+- [ ] Implement `SalesforceJsonReader` (specialized schema handling).
+- [ ] Add integration for NGA-captured raw visual data.
+- [ ] Test hybrid search with complex exam questions.

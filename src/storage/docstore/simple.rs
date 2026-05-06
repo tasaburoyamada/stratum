@@ -88,6 +88,28 @@ impl DocumentStore for SimpleDocumentStore {
         Ok(data.hashes.clone())
     }
 
+    async fn get_ref_doc_info(&self, ref_doc_id: &str) -> Result<Option<RefDocInfo>> {
+        let data = self.data.read().map_err(|e| anyhow::anyhow!("ERR_LOCK_POISONED: {}", e))?;
+        Ok(data.ref_doc_info.get(ref_doc_id).cloned())
+    }
+
+    async fn set_ref_doc_info(&self, ref_doc_id: &str, ref_doc_info: RefDocInfo) -> Result<()> {
+        let mut data = self.data.write().map_err(|e| anyhow::anyhow!("ERR_LOCK_POISONED: {}", e))?;
+        data.ref_doc_info.insert(ref_doc_id.to_string(), ref_doc_info);
+        Ok(())
+    }
+
+    async fn delete_ref_doc_info(&self, ref_doc_id: &str) -> Result<()> {
+        let mut data = self.data.write().map_err(|e| anyhow::anyhow!("ERR_LOCK_POISONED: {}", e))?;
+        data.ref_doc_info.remove(ref_doc_id);
+        Ok(())
+    }
+
+    async fn get_all_ref_doc_info(&self) -> Result<HashMap<String, RefDocInfo>> {
+        let data = self.data.read().map_err(|e| anyhow::anyhow!("ERR_LOCK_POISONED: {}", e))?;
+        Ok(data.ref_doc_info.clone())
+    }
+
     async fn persist(&self, path: &str) -> Result<()> {
         let data = self.data.read().map_err(|e| anyhow::anyhow!("ERR_LOCK_POISONED: {}", e))?;
         let encoded: Vec<u8> = bincode::serialize(&*data)?;

@@ -28,6 +28,7 @@ pub mod readers {
     pub mod pdf;
 }
 pub mod feeding;
+pub mod evaluation;
 pub mod indices {
     pub mod vector_store;
     pub mod hierarchical;
@@ -63,3 +64,4 @@ pub mod storage {
         pub mod simple;
     }
 }
+pub mod research { pub mod selector_v1; }

@@ -52,7 +52,8 @@ impl NativeVectorStore {
 
         for result in embeddings_table.iter()? {
             let (id, emb_bytes) = result?;
-            let embedding: Vec<half::f16> = bincode::deserialize(emb_bytes.value().as_slice())?;
+            // Use JSON for metadata-like vectors to avoid bincode strictness issues
+            let embedding: Vec<half::f16> = serde_json::from_slice(emb_bytes.value().as_slice())?;
             let f32_emb: Vec<f32> = embedding.iter().map(|&x| f32::from(x)).collect();
             
             if let Some(inner_id) = reverse_table.get(id.value())? {
@@ -88,8 +89,8 @@ impl VectorStore for NativeVectorStore {
                     }
 
                     let node_id = node.id_.clone();
-                    let emb_bytes = bincode::serialize(&embedding)?;
-                    let node_bytes = bincode::serialize(&node)?;
+                    let emb_bytes = serde_json::to_vec(&embedding)?;
+                    let node_bytes = serde_json::to_vec(&node)?;
                     
                     emb_table.insert(node_id.as_str(), emb_bytes)?;
                     nodes_table.insert(node_id.as_str(), node_bytes)?;
@@ -154,7 +155,7 @@ impl VectorStore for NativeVectorStore {
                 
                 if let Some(filters) = &query.filters {
                     if let Some(node_bytes) = nodes_table.get(node_id_str)? {
-                        let node: Node = bincode::deserialize(node_bytes.value().as_slice())?;
+                        let node: Node = serde_json::from_slice(node_bytes.value().as_slice())?;
                         if !crate::vector_stores::utils::filter_metadata(&node.metadata, &filters.filters, &filters.condition) {
                             continue;
                         }

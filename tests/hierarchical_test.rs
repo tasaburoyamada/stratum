@@ -74,7 +74,8 @@ async fn test_hierarchical_index_persistence() -> anyhow::Result<()> {
     let mut index_id = String::new();
 
     {
-        let storage_context = StorageContext::from_defaults();
+        // Use from_dir with a fresh directory to ensure Redb variants are used
+        let storage_context = StorageContext::from_dir(persist_dir)?;
         let nodes = vec![
             Node::new_text("Persistent context A".to_string()),
             Node::new_text("Persistent context B".to_string()),

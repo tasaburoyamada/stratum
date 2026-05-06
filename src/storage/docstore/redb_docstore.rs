@@ -38,7 +38,7 @@ impl DocumentStore for RedbDocumentStore {
         {
             let mut table = write_txn.open_table(DOCS_TABLE)?;
             for doc in docs {
-                let bytes = bincode::serialize(&doc)?;
+                let bytes = serde_json::to_vec(&doc)?;
                 table.insert(doc.id_.as_str(), bytes)?;
             }
         }
@@ -50,7 +50,7 @@ impl DocumentStore for RedbDocumentStore {
         let read_txn = self.db.begin_read()?;
         let table = read_txn.open_table(DOCS_TABLE)?;
         if let Some(bytes) = table.get(doc_id)? {
-            let node: Node = bincode::deserialize(bytes.value().as_slice())?;
+            let node: Node = serde_json::from_slice(bytes.value().as_slice())?;
             Ok(Some(node))
         } else {
             Ok(None)

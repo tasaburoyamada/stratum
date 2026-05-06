@@ -1,3 +1,4 @@
+use futures::stream::BoxStream;
 use stratum::readers::web::WebReader;
 use stratum::readers::base::Reader;
 use stratum::node_parser::sentence_splitter::SentenceSplitter;
@@ -23,6 +24,7 @@ impl LlmClient for MockLlm {
         Ok(format!("Mock response for prompt length: {}", prompt.len()))
     }
 
+    fn stream_complete(&self, prompt: &str) -> BoxStream<'static, anyhow::Result<String>> { let prompt = prompt.to_string(); let client = self.clone_box(); use futures::stream::{self, StreamExt}; stream::once(async move { client.complete(&prompt).await }).boxed() }
     fn clone_box(&self) -> Box<dyn LlmClient> {
         Box::new(Self)
     }

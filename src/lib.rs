@@ -28,7 +28,6 @@ pub mod readers {
     pub mod json;
     pub mod pdf;
     pub mod markdown;
-    pub mod salesforce;
 }
 pub mod feeding;
 pub mod evaluation;

@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0-dev] - 2026-05-06
+
+### Added
+- **Semantic Chunking**: Implemented `SemanticSplitter` which uses embedding similarity to detect topic boundaries for more meaningful document splitting.
+- **RAG Evaluation Module**: Added `Faithfulness` and `Relevancy` evaluators for automated RAG quality assurance.
+- **Selector Distillation Base**: Established research base for dedicated MLP selectors with automated data capture.
+- **Parallel Ingestion**: Enabled multi-threaded summary generation in `HierarchicalIndex`.
+- **True Streaming LLM**: Upgraded `CandleLlm` to support real-time token-by-token generation.
+
 ## [0.3.0] - 2026-05-06
 
 ### Added

@@ -11,40 +11,33 @@ This file tracks tasks and their status, mapped to Gitea issues.
 | #5 | Implement Hybrid Retriever | Completed | develop | Combine Vector, Keyword, and Hierarchical search strategies. |
 | #6 | PDF Document Support | Completed | develop | Add a Reader for PDF files using a pure-Rust library. |
 | #7 | Integration with Lasada | Completed | develop | Replace/Augment Lasada's RAG capabilities with Stratum. |
-| #8 | Intelligence Feeding | In Progress | feature/8-feeding-layer | Implement feeding.rs to export structured datasets for LoRA/distillation. |
-| #9 | Dedicated Small Model Research | To Do | - | Explore training a specialized router/selector model for PageIndex. |
-
-## Issue #1: Hierarchical Index (PageIndex)
-- [x] Define Hierarchical Node Structure (Parent/Child relations)
-- [x] Implement `HierarchicalIndex` trait and struct
-- [x] Implement recursive summarization logic (using LLM)
-- [x] Implement `HierarchicalRetriever` (Semantic traversal)
-- [x] Add integration tests for Hierarchical RAG
-
-## Issue #4: Complete Hierarchical Index Persistence
-- [x] Extend `IndexStruct` or add metadata to support root node tracking.
-- [x] Implement `HierarchicalIndex::from_storage_context` for restoration.
-- [x] Add persistence test for Hierarchical Index.
-
-## Issue #5: Hybrid Retriever
-- [x] Implement `HybridRetriever` struct and trait.
-- [x] Support `WeightedSum` and `ReciprocalRankFusion` (RRF) modes.
-- [x] Add integration tests for hybrid search.
-
-## Issue #6: PDF Document Support
-- [x] Add `pdf-extract` dependency.
-- [x] Implement `PdfReader` with tokio blocking task support.
-- [x] Register `pdf` module in `lib.rs`.
-
-## Issue #7: Integration with Lasada
-- [x] Define `StratumRAG` bridge in `lasada`.
-- [x] Implement data synchronization/ingestion from `lasada` context to Stratum.
-- [x] Expose Stratum search results to `lasada` agents.
-- [x] Fix compilation errors and API alignment in `lasada/src/core/interpreter.rs`.
+| #8 | Intelligence Feeding | Completed | develop | Implement feeding.rs to export structured datasets for LoRA/distillation. |
+| #9 | Dedicated Small Model Research | In Progress | develop | Explore training a specialized router/selector model for PageIndex. |
+| #10 | Robust RAG Storage in Lasada | Completed | develop | Move RAG state to StratumRAG bridge and implement proper persistence. |
+| #11 | RAG Evaluation Module | Completed | develop | Implement Faithfulness and Relevancy evaluators. |
+| #12 | Semantic Chunking Parser | Completed | develop | Implement intelligent content splitting based on embedding shifts. |
 
 ## Issue #8: Intelligence Feeding
+- [x] Implement `feeding.rs` module in Stratum.
+- [x] Define `DatasetTriplet` and `SelectorTriplet` structures.
+- [x] Create a mechanism to capture and store these triplets during RAG operation.
+- [x] Implement export to JSONL format.
+
+## Issue #9: Dedicated Small Model Research
 ### Tasks:
-- [ ] Implement `feeding.rs` module in Stratum.
-- [ ] Define `DatasetTriplet` structure (Query, Context, Response).
-- [ ] Create a mechanism to capture and store these triplets during RAG operation.
-- [ ] Implement export to HuggingFace-compatible JSONL format.
+- [x] Define MLP-based `VectorSelector` architecture in Candle.
+- [x] Implement `SelectorTrainer` for intelligence distillation.
+- [x] Build research prototype script for training proof-of-concept.
+- [ ] Large-scale training and evaluation on captured data.
+- [ ] Integration into `HierarchicalRetriever` as an alternative to LLM.
+
+## Issue #11: RAG Evaluation Module
+- [x] Define `BaseEvaluator` trait and `EvaluationResult` schema.
+- [x] Implement `FaithfulnessEvaluator` (Hallucination detection).
+- [x] Implement `RelevancyEvaluator` (Query alignment).
+- [x] Add automated evaluation tests.
+
+## Issue #12: Semantic Chunking Parser
+- [x] Implement `SemanticSplitter` with dynamic boundary detection.
+- [x] Use cosine similarity between sentence embeddings to find breakpoints.
+- [x] Integrate into `Transformation` pipeline.

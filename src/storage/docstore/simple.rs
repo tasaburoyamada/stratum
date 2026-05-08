@@ -18,6 +18,12 @@ pub struct SimpleDocumentStore {
     data: RwLock<SimpleDocStoreData>,
 }
 
+impl Default for SimpleDocumentStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SimpleDocumentStore {
     pub fn new() -> Self {
         Self {

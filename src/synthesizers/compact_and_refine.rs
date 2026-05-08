@@ -54,14 +54,13 @@ impl CompactAndRefine {
                     log::warn!("Single node content ({} tokens) exceeds effective limit ({} tokens)", text_len, effective_limit);
                 }
 
-                if current_len + text_len > effective_limit {
-                    if !current_chunk.is_empty() {
+                if current_len + text_len > effective_limit
+                    && !current_chunk.is_empty() {
                         chunks.push(current_chunk.join("\n\n"));
                         current_chunk = Vec::new();
                         // Reset current_len with refine template baseline
                         current_len = self.count_tokens(&refine_template.replace("{query_str}", query_str));
                     }
-                }
                 current_len += text_len;
                 current_chunk.push(text);
             }

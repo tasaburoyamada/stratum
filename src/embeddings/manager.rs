@@ -9,6 +9,12 @@ pub struct EmbeddingManager {
     models: Mutex<HashMap<String, Arc<dyn Embedding>>>,
 }
 
+impl Default for EmbeddingManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EmbeddingManager {
     pub fn new() -> Self {
         Self {

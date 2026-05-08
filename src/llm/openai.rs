@@ -82,7 +82,7 @@ impl LlmClient for OpenAIClient {
             .json::<ChatCompletionResponse>()
             .await?;
 
-        response.choices.get(0)
+        response.choices.first()
             .map(|c| c.message.content.clone())
             .ok_or_else(|| anyhow!("No response from OpenAI"))
     }

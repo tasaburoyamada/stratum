@@ -20,6 +20,12 @@ pub struct SimpleVectorStore {
     data: RwLock<SimpleVectorStoreData>,
 }
 
+impl Default for SimpleVectorStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SimpleVectorStore {
     pub fn new() -> Self {
         Self {

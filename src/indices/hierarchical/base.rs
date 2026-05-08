@@ -77,7 +77,7 @@ impl HierarchicalIndex {
                 let key = node.metadata.file_path.clone()
                     .or(node.metadata.url.clone())
                     .unwrap_or_else(|| "default_group".to_string());
-                groups.entry(key).or_insert_with(Vec::new).push(node);
+                groups.entry(key).or_default().push(node);
             }
 
             let mut tasks = Vec::new();

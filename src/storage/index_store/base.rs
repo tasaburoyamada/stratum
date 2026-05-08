@@ -24,6 +24,12 @@ pub struct SimpleIndexStore {
     data: RwLock<HashMap<String, IndexStruct>>,
 }
 
+impl Default for SimpleIndexStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SimpleIndexStore {
     pub fn new() -> Self {
         Self {

@@ -79,7 +79,7 @@ impl VectorStore for NativeVectorStore {
             let hnsw = self.hnsw.write().unwrap();
 
             let mut next_id = 0;
-            if let Some(last) = mapping_table.iter()?.rev().next() {
+            if let Some(last) = mapping_table.iter()?.next_back() {
                 next_id = last?.0.value() + 1;
             }
 

@@ -159,7 +159,7 @@ impl Transformation for SentenceSplitter {
                     
                     // Cache tokens in the node (convert from usize to u32 for efficiency if needed, but keeping as is for now)
                     let tokens = self.bpe.encode_with_special_tokens(&chunk);
-                    new_node.tokens = Some(tokens.into_iter().map(|t| t as u32).collect());
+                    new_node.tokens = Some(tokens.into_iter().collect());
 
                     // Python版の振る舞いを模倣: 親ドキュメントへの参照を保持
                     let mut rels = std::collections::HashMap::new();

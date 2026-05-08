@@ -49,17 +49,24 @@ impl NativeVectorStore {
         let read_txn = self.db.begin_read()?;
         let embeddings_table = read_txn.open_table(EMBEDDINGS_TABLE)?;
         let reverse_table = read_txn.open_table(REVERSE_MAPPING_TABLE)?;
-        let hnsw = self.hnsw.write().unwrap();
-
+        
+        // Collect data first to minimize lock time
+        let mut updates = Vec::new();
         for result in embeddings_table.iter()? {
             let (id, emb_bytes) = result?;
-            // Use JSON for metadata-like vectors to avoid bincode strictness issues
-            let embedding: Vec<half::f16> = serde_json::from_slice(emb_bytes.value().as_slice())?;
+            // Use Bincode for performance
+            let embedding: Vec<half::f16> = bincode::deserialize(emb_bytes.value().as_slice())?;
             let f32_emb: Vec<f32> = embedding.iter().map(|&x| f32::from(x)).collect();
             
             if let Some(inner_id) = reverse_table.get(id.value())? {
-                hnsw.insert((&f32_emb, inner_id.value() as usize));
+                updates.push((f32_emb, inner_id.value() as usize));
             }
+        }
+
+        // Apply updates in a single lock window
+        let mut hnsw = self.hnsw.write().unwrap();
+        for (f32_emb, inner_id) in updates {
+            hnsw.insert((&f32_emb, inner_id));
         }
         Ok(())
     }
@@ -70,13 +77,13 @@ impl VectorStore for NativeVectorStore {
     async fn add(&self, nodes: Vec<Node>) -> Result<Vec<String>> {
         let write_txn = self.db.begin_write()?;
         let mut ids = Vec::new();
+        let mut hnsw_updates = Vec::new();
 
         {
             let mut emb_table = write_txn.open_table(EMBEDDINGS_TABLE)?;
             let mut mapping_table = write_txn.open_table(MAPPING_TABLE)?;
             let mut reverse_table = write_txn.open_table(REVERSE_MAPPING_TABLE)?;
             let mut nodes_table = write_txn.open_table(NODES_TABLE)?;
-            let hnsw = self.hnsw.write().unwrap();
 
             let mut next_id = 0;
             if let Some(last) = mapping_table.iter()?.next_back() {
@@ -90,7 +97,7 @@ impl VectorStore for NativeVectorStore {
                     }
 
                     let node_id = node.id_.clone();
-                    let emb_bytes = serde_json::to_vec(&embedding)?;
+                    let emb_bytes = bincode::serialize(&embedding)?;
                     let node_bytes = serde_json::to_vec(&node)?;
                     
                     emb_table.insert(node_id.as_str(), emb_bytes)?;
@@ -99,7 +106,7 @@ impl VectorStore for NativeVectorStore {
                     reverse_table.insert(node_id.as_str(), next_id)?;
 
                     let f32_emb: Vec<f32> = embedding.iter().map(|&x| f32::from(x)).collect();
-                    hnsw.insert((&f32_emb, next_id as usize));
+                    hnsw_updates.push((f32_emb, next_id as usize));
 
                     ids.push(node_id);
                     next_id += 1;
@@ -107,6 +114,15 @@ impl VectorStore for NativeVectorStore {
             }
         }
         write_txn.commit()?;
+
+        // Apply HNSW updates AFTER disk commit and OUTSIDE redb transaction
+        // to minimize lock contention and ensure consistency.
+        {
+            let mut hnsw = self.hnsw.write().unwrap();
+            for (f32_emb, inner_id) in hnsw_updates {
+                hnsw.insert((&f32_emb, inner_id));
+            }
+        }
 
         Ok(ids)
     }
@@ -125,6 +141,8 @@ impl VectorStore for NativeVectorStore {
                 nodes_table.remove(node_id)?;
                 mapping_table.remove(id)?;
                 reverse_table.remove(node_id)?;
+                // Note: hnsw-rs doesn't easily support deletion without rebuild or tombstone.
+                // For now we keep it in HNSW but it won't have a mapping in Redb.
             }
         }
         write_txn.commit()?;

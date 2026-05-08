@@ -3,17 +3,19 @@ use crate::core::ingestion::transformation::Transformation;
 use anyhow::Result;
 use async_trait::async_trait;
 use regex::Regex;
+use std::sync::OnceLock;
 
 use crate::core::config::SplitterConfig;
 
 use tiktoken_rs::{cl100k_base, CoreBPE};
 use std::sync::Arc;
 
+static BPE_CACHE: OnceLock<Arc<CoreBPE>> = OnceLock::new();
+static REGEX_CACHE: OnceLock<Regex> = OnceLock::new();
+
 #[derive(Clone)]
 pub struct SentenceSplitter {
     pub config: SplitterConfig,
-    pub secondary_chunking_regex: Regex,
-    pub bpe: Arc<CoreBPE>,
 }
 
 impl std::fmt::Debug for SentenceSplitter {
@@ -32,15 +34,19 @@ impl Default for SentenceSplitter {
 
 impl SentenceSplitter {
     pub fn new(config: SplitterConfig) -> Self {
-        Self {
-            config,
-            secondary_chunking_regex: Regex::new(r"[^,.;。？！]+[,.;。？！]?|[,.;。？！]").unwrap(),
-            bpe: Arc::new(cl100k_base().unwrap()),
-        }
+        Self { config }
+    }
+
+    fn get_bpe(&self) -> &Arc<CoreBPE> {
+        BPE_CACHE.get_or_init(|| Arc::new(cl100k_base().unwrap()))
+    }
+
+    fn get_regex(&self) -> &Regex {
+        REGEX_CACHE.get_or_init(|| Regex::new(r"[^,.;。？！]+[,.;。？！]?|[,.;。？！]").unwrap())
     }
 
     fn count_tokens(&self, text: &str) -> usize {
-        self.bpe.encode_with_special_tokens(text).len()
+        self.get_bpe().encode_with_special_tokens(text).len()
     }
 
     fn split(&self, text: &str, chunk_size: usize) -> Vec<SplitResult> {
@@ -59,7 +65,7 @@ impl SentenceSplitter {
         }
 
         // 2. Secondary regex split (Sentences/Phrases)
-        let sentences: Vec<&str> = self.secondary_chunking_regex.find_iter(text).map(|m| m.as_str()).collect();
+        let sentences: Vec<&str> = self.get_regex().find_iter(text).map(|m| m.as_str()).collect();
         if sentences.len() > 1 {
             return self.split_recursive(&sentences, chunk_size);
         }
@@ -158,7 +164,7 @@ impl Transformation for SentenceSplitter {
                     new_node.metadata = node.metadata.clone();
                     
                     // Cache tokens in the node (convert from usize to u32 for efficiency if needed, but keeping as is for now)
-                    let tokens = self.bpe.encode_with_special_tokens(&chunk);
+                    let tokens = self.get_bpe().encode_with_special_tokens(&chunk);
                     new_node.tokens = Some(tokens.into_iter().collect());
 
                     // Python版の振る舞いを模倣: 親ドキュメントへの参照を保持

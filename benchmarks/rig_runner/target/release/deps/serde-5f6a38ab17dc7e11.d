@@ -1,0 +1,14 @@
+/home/dskku/sandbox/kaihatu/stratum/benchmarks/rig_runner/target/release/deps/serde-5f6a38ab17dc7e11.d: /home/dskku/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /home/dskku/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /home/dskku/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /home/dskku/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /home/dskku/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /home/dskku/sandbox/kaihatu/stratum/benchmarks/rig_runner/target/release/build/serde-83bd76a5d861502a/out/private.rs
+
+/home/dskku/sandbox/kaihatu/stratum/benchmarks/rig_runner/target/release/deps/libserde-5f6a38ab17dc7e11.rlib: /home/dskku/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /home/dskku/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /home/dskku/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /home/dskku/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /home/dskku/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /home/dskku/sandbox/kaihatu/stratum/benchmarks/rig_runner/target/release/build/serde-83bd76a5d861502a/out/private.rs
+
+/home/dskku/sandbox/kaihatu/stratum/benchmarks/rig_runner/target/release/deps/libserde-5f6a38ab17dc7e11.rmeta: /home/dskku/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /home/dskku/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /home/dskku/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /home/dskku/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /home/dskku/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /home/dskku/sandbox/kaihatu/stratum/benchmarks/rig_runner/target/release/build/serde-83bd76a5d861502a/out/private.rs
+
+/home/dskku/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs:
+/home/dskku/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs:
+/home/dskku/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs:
+/home/dskku/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs:
+/home/dskku/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs:
+/home/dskku/sandbox/kaihatu/stratum/benchmarks/rig_runner/target/release/build/serde-83bd76a5d861502a/out/private.rs:
+
+# env-dep:OUT_DIR=/home/dskku/sandbox/kaihatu/stratum/benchmarks/rig_runner/target/release/build/serde-83bd76a5d861502a/out

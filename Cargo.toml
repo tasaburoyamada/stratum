@@ -51,3 +51,8 @@ path = "benchmarks/stratum_bench.rs"
 # [[bin]]
 # name = "rig_bench"
 # path = "benchmarks/rig_bench.rs"
+
+[[bin]]
+name = "benchmark_native_store"
+path = "benchmarks/benchmark_native_store.rs"
+

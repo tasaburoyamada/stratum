@@ -18,6 +18,13 @@ This file tracks tasks and their status, mapped to Gitea issues.
 | #12 | Semantic Chunking Parser | Completed | develop | Implement intelligent content splitting based on embedding shifts. |
 | #13 | Salesforce Exam Ingestion | Completed | develop | Implement a dedicated reader or JSONL ingestion flow for Salesforce exam data. |
 | #14 | Hybrid LLM Support (OpenAI API) | Completed | develop | Implement an OpenAI-compatible client to support cloud-hosted models. |
+| #15 | In-memory Storage Support | Open | develop | Implement runtime switching between persistent redb and high-speed in-memory storage. |
+
+## Issue #15: In-memory Storage Support
+- [ ] Implement `StorageContext::in_memory()` constructor to initialize non-persistent store implementations.
+- [ ] Add runtime configuration/flag to switch between `redb` (Long-term) and `Simple` (Short-term/Task-local) memory.
+- [ ] Optimization: Introduce build-time feature flags (e.g., `--features memory-only`) to exclude `redb` dependencies for restricted environments like WASM.
+- [ ] Strategy: Align with "Stratification" concept, where in-memory serves as a high-speed scratchpad and redb serves as the durable knowledge base.
 
 ## Issue #9: Dedicated Small Model Research
 - [x] Define MLP-based `VectorSelector` architecture in Candle.

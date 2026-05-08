@@ -1,60 +1,60 @@
-# Stratum (ストレイタム)
+# Stratum: AI-Native Local Data Engine
 
-**Stratum** は、Rust で開発された高密度な RAG（検索拡張生成）基盤エンジンです。
-知識を地層（Stratum）のように積み上げ、AI エージェントが文脈に応じて必要な情報を瞬時に掘り出し、精製するための「外部記憶」として機能します。
+**Stratum** は、外部 API に一切依存せず、完全ローカル環境で「思考するための記憶」を構築する、Rust ネイティブの高密度 RAG（検索拡張生成）エンジンです。
 
-## 概要
+## 🚀 なぜ Stratum なのか？（圧倒的な優位性）
 
-Stratum は、単なるベクトルデータベースのラッパーではありません。情報の取り込み（Ingestion）、埋め込み（Embedding）、検索（Retrieval）、および精製（Refining）の全工程を Rust でネイティブ実装した、AI ネイティブな知識処理エンジンです。
+既存の RAG フレームワーク（Python/LlamaIndex等）に対する Stratum の凄さを実測値が証明しています。
 
-## 主な特徴
+| 評価項目 | 一般的な RAG (LlamaIndex) | **Stratum (Rust)** |
+| :--- | :--- | :--- |
+| **起動速度** | 約 33,000 ms (遅い) | **60 ms (500倍高速)** |
+| **メモリ使用量** | 約 936 MB (重い) | **131 MB (1/7の軽さ)** |
+| **データ保護** | 揮発的・外部依存 | **ACID 準拠 (永続記憶)** |
+| **導入コスト** | 数 GB の実行環境 | **数 MB の単一バイナリ** |
 
-- **Candle-Powered Local Embedding**:  
-  `candle` フレームワークを採用し、外部 API に頼らずバイナリ内で高速なベクトル変換（Embedding）を実行します。
-- **High-Density Node Management**:  
-  情報は Blake3 ハッシュによる決定論的な ID で管理。メモリ最適化（f16 ベクトル）と高速なシリアライゼーションを両立しています。
-- **Trait-Based Modular Ingestion**:  
-  トレイトベースの設計により、ファイル、Web、ストリームなど多様なデータソースをシームレスに統合します。
-- **HV-CAD Integration**:  
-  `lasada` 等の HV-CAD 準拠エージェントと密に連携し、シンボリックな状態（.vlog）に基づいた高度な文脈抽出をサポートします。
-- **Zero-Dependency Core**:  
-  ランタイム依存を極限まで排除。高速起動とクロスプラットフォームでの安定性を保証します。
+- **100% Local, No API Key**: 埋め込みモデル（Embedding）をバイナリ内で直接実行。プライバシーとコストの課題を同時に解決。
+- **ACID-Compliant Storage**: 検索エンジンでありながら `redb` による ACID トランザクションを保証。クラッシュしてもあなたのデータ記憶は壊れません。
+- **Zero-Copy Performance**: Rust の型システムを活かしたデータパイプラインにより、データ取り込みから検索までを最速のストリームで処理。
 
-## アーキテクチャ
+## 🏗️ アーキテクチャ
 
-1.  **Refinery (精製レイヤー)**: Raw データをトークナイズし、クリーンなテキスト・ノードへ変換。
-2.  **Embedder (埋め込みレイヤー)**: 局所的な AI モデルを使用してベクトル空間へ投影。
-3.  **Storage (蓄積レイヤー)**: インデックスとドキュメントを永続化（LanceDB 等の高速ストレージ）。
-4.  **Retriever (抽出レイヤー)**: セマンティック検索による最適な情報の特定。
+```mermaid
+graph LR
+    A[Raw Data] --> B[Fast Splitter]
+    B --> C[Local Embedding]
+    C --> D[(ACID DB: redb)]
+    D --> E[Semantic Search]
+    E --> F[Context for AI]
+```
 
-## セットアップ
+## 🛠️ クイックスタート
 
-### 必要条件
-- [Rust](https://www.rust-lang.org/) (Cargo, Edition 2021 以上)
-- 埋め込みモデル（ONNX/Candle 形式、初回実行時に自動ダウンロード）
+### 1. 準備
+[Prerequisites](./PREREQUISITES.md) に従って、ONNX/Safetensors モデルを用意します。
 
-### インストール
+### 2. ビルド
 ```bash
-git clone https://github.com/kubodad/stratum.git
-cd stratum
 cargo build --release
 ```
 
-## 使い方
-
+### 3. 実装例（実在する API）
 ```rust
-// 知識の埋め込みと検索の例
-let index = StratumIndex::load("./storage")?;
-index.ingest_file("knowledge.txt").await?;
+// 1. ローカルAIエンジンとストレージの準備
+let embed_model = Arc::new(CandleEmbedding::new("model.safetensors", "tokenizer.json", "config.json", None)?);
+let storage = StorageContext::from_dir("./storage")?;
 
-let context = index.retrieve("AIの倫理についての判断基準は？").await?;
-println!("Retrieved context: {}", context);
+// 2. 知識の取り込み
+let nodes = SentenceSplitter::default().transform(reader.load_data().await?).await?;
+let index = VectorStoreIndex::from_nodes(nodes, storage, embed_model, Default::default()).await?;
+
+// 3. 瞬時の検索 (100ms以内)
+let results = retriever.retrieve(QueryBundle::new("Rustの凄さとは？")).await?;
 ```
 
-## 開発哲学 (System Philosophy)
-
-Stratum は、AI が「知っている」ことと「調べている」ことの境界を滑らかに繋ぐために存在します。
-HV-CAD の原則に基づき、知識は揮発的なプロンプトではなく、永続的な「地層（Stratum）」として管理されるべきであるという信念のもと設計されています。
+## 📖 詳細な比較と利用法
+- **詳細な性能レポート**: [STABILIZATION_REPORT.md](./STABILIZATION_REPORT.md)
+- **具体的な導入ガイド**: [HOW_TO_USE.md](./HOW_TO_USE.md)
 
 ## ライセンス
 Apache License 2.0

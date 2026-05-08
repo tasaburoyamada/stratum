@@ -1,52 +1,77 @@
 # How to Use Stratum
 
-Stratum を使用した知識のインジェスト、検索、および精製の手順。
+Stratum をライブラリとして使用し、ドキュメントのインジェスト（取り込み）と検索を行うための基本手順です。
 
-## 1. ライブラリとして使用する
+## 1. ライブラリの導入
 
-`Cargo.toml` に以下を追加します：
+`Cargo.toml` に以下を追加します。
 
 ```toml
 [dependencies]
-stratum = { path = "../stratum" }
+stratum = { path = "path/to/stratum" }
+tokio = { version = "1.0", features = ["full"] }
 ```
 
-### 基本的な検索フロー
+## 2. 基本的な RAG フロー
+
+以下の 3 ステップで、ローカルデータに対するセマンティック検索を実装できます。
+
+### ステップ 1: モデルとストレージの準備
+`CandleEmbedding` を初期化し、`StorageContext` でデータの保存先を指定します。
 
 ```rust
-use stratum::prelude::*;
+use std::sync::Arc;
+use stratum::embeddings::candle::CandleEmbedding;
+use stratum::storage::storage_context::StorageContext;
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    // 1. インデックスの初期化
-    let mut engine = StratumEngine::new("./storage")?;
+// ローカルの ONNX モデルをロード
+let embed_model = Arc::new(CandleEmbedding::new(
+    "path/to/model.onnx",
+    "path/to/tokenizer.json",
+    "path/to/config.json",
+    None
+)?);
 
-    // 2. データのインジェスト (Web/File)
-    engine.ingest_url("https://example.com/docs").await?;
-    engine.ingest_file("local_knowledge.md").await?;
+// redb (ACID準拠) によるストレージ管理
+let storage_context = StorageContext::from_dir("./my_storage")?;
+```
 
-    // 3. セマンティック検索の実行
-    let query = "エージェントの自律性に関する定義は？";
-    let results = engine.retrieve(query, 3).await?;
+### ステップ 2: データの取り込みと分割
+ディレクトリ内のファイルを読み込み、検索に適したサイズ（ノード）に分割します。
 
-    for node in results {
-        println!("Score: {}, Content: {}", node.score, node.content);
-    }
+```rust
+use stratum::readers::file::SimpleDirectoryReader;
+use stratum::node_parser::sentence_splitter::SentenceSplitter;
 
-    Ok(())
+// 1. ファイルの読み込み
+let reader = SimpleDirectoryReader::new("path/to/data", true, Some(vec!["md".into()]), None);
+let documents = reader.load_data().await?;
+
+// 2. テキストの分割 (Node化)
+let nodes = SentenceSplitter::default().transform(documents).await?;
+```
+
+### ステップ 3: インデックス構築と検索
+ベクトルインデックスを構築し、クエリに対して最も関連性の高い情報を抽出します。
+
+```rust
+use stratum::indices::vector_store::VectorStoreIndex;
+use stratum::retrievers::vector_store_retriever::VectorIndexRetriever;
+use stratum::core::query_bundle::QueryBundle;
+
+// インデックスの構築
+let index = Arc::new(VectorStoreIndex::from_nodes(
+    nodes,
+    storage_context,
+    embed_model,
+    Default::default()
+).await?);
+
+// 検索の実行 (上位3件を取得)
+let retriever = VectorIndexRetriever::new(index, 3, None);
+let results = retriever.retrieve(QueryBundle::new("Rustの特徴は？")).await?;
+
+for res in results {
+    println!("Score: {:?}, Content: {:?}", res.score, res.node.content);
 }
 ```
-
-## 2. CLI ツールとして使用する (開発中)
-
-```bash
-# 知識の追加
-stratum ingest --file ./docs/architecture.md
-
-# 検索クエリの実行
-stratum search "HV-CAD の核心概念は何？"
-```
-
-## 3. HV-CAD 統合 (.vlog 連携)
-
-Stratum は検索時に `.vlog` 内の現在の `@CTX` を参照し、動的にスコアリングを調整することが可能です（実装予定）。これにより、単なるキーワード一致を超えた、現在のタスクに最適な「知識の層」を特定します。

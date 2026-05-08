@@ -32,8 +32,11 @@ let embed_model = Arc::new(CandleEmbedding::new(
     None
 )?);
 
-// redb (ACID準拠) によるストレージ管理
-let storage_context = StorageContext::from_dir("./my_storage")?;
+// 【永続化モード】 redb (ACID準拠) によるストレージ管理
+let storage_context_persistent = StorageContext::from_dir("./my_storage")?;
+
+// 【超高速インメモリモード】 一時的な処理やバッチ検索用
+let storage_context_memory = StorageContext::in_memory();
 ```
 
 ### ステップ 2: データの取り込みと分割
@@ -75,3 +78,38 @@ for res in results {
     println!("Score: {:?}, Content: {:?}", res.score, res.node.content);
 }
 ```
+
+## 3. Python バインディング (PyO3) の利用
+
+Python 環境から Stratum を呼び出す極薄ラッパーを提供しています。これにより Python スクリプトから Rust の超高速・省メモリなコアエンジンを透過的に利用可能です。
+
+### インストール手順
+
+Python プロジェクトの仮想環境内で以下を実行します。
+
+```bash
+# Maturinのインストール
+pip install maturin
+
+# Stratum の Python バインディングディレクトリへ移動
+cd bindings/python
+
+# ビルドして現在の仮想環境へインストール (Rust側のコンパイルが走ります)
+maturin develop --release
+```
+
+### Python からの利用例
+
+```python
+import stratum_rag
+
+# In-Memory モードで初期化 (永続化する場合はディレクトリパスを渡す)
+engine = stratum_rag.Stratum()
+
+# 稼働確認
+print(engine.ping())
+# => "Stratum Core (Rust) is active."
+```
+
+*※ 現在 Python 側のインターフェースは意図的に「極薄」に保たれています。高度なデータ制御やカスタマイズは Rust 側 (`src/`) で完結させることが本プロジェクトの設計思想です。*
+

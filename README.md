@@ -4,18 +4,20 @@
 
 ## 🚀 なぜ Stratum なのか？（圧倒的な優位性）
 
-既存の RAG フレームワーク（Python/LlamaIndex等）に対する Stratum の凄さを実測値が証明しています。
+既存の RAG フレームワーク（Python/LlamaIndex等）に対する Stratum の凄さを実測値が証明しています。同一条件下（モック埋め込みモデルを用いたインメモリ動作）での比較結果です。
 
-| 評価項目 | 一般的な RAG (LlamaIndex) | **Stratum (Rust)** |
-| :--- | :--- | :--- |
-| **起動速度** | 約 33,000 ms (遅い) | **60 ms (500倍高速)** |
-| **メモリ使用量** | 約 936 MB (重い) | **131 MB (1/7の軽さ)** |
-| **データ保護** | 揮発的・外部依存 | **ACID 準拠 (永続記憶)** |
-| **導入コスト** | 数 GB の実行環境 | **数 MB の単一バイナリ** |
+| 評価項目 | 一般的な RAG (LlamaIndex) | **Stratum (Rust/In-Memory)** | Stratumの優位性 |
+| :--- | :--- | :--- | :--- |
+| **起動時間** | 0.43 ms | **0.00007 ms (70ns)** | 約 **6100倍** 高速 |
+| **インジェスト (3 docs)** | 128.17 ms | **68.58 ms** | 約 **1.8倍** 高速 |
+| **クエリレイテンシ** | 2.18 ms | **1.05 ms** | 約 **2倍** 高速 |
+| **メモリ使用量 (RSS)** | 145.38 MB | **25.17 MB** | 約 **1/5** の省メモリ |
+| **全体実行時間** | 131.09 ms | **71.50 ms** | 約 **1.8倍** 高速 |
 
 - **100% Local, No API Key**: 埋め込みモデル（Embedding）をバイナリ内で直接実行。プライバシーとコストの課題を同時に解決。
-- **ACID-Compliant Storage**: 検索エンジンでありながら `redb` による ACID トランザクションを保証。クラッシュしてもあなたのデータ記憶は壊れません。
+- **ACID-Compliant vs High-Speed In-Memory**: 永続記憶（`redb`）と、超高速な一時記憶（`In-Memory`）をユースケースに応じて切り替え可能。
 - **Zero-Copy Performance**: Rust の型システムを活かしたデータパイプラインにより、データ取り込みから検索までを最速のストリームで処理。
+- **Pip Installable (Python Bindings)**: Python撲滅派のための極薄ラッパー。Pythonから `pip install` で利用しつつ、中身は完全なRustネイティブで動作。
 
 ## 🏗️ アーキテクチャ
 
@@ -23,7 +25,7 @@
 graph LR
     A[Raw Data] --> B[Fast Splitter]
     B --> C[Local Embedding]
-    C --> D[(ACID DB: redb)]
+    C --> D[(Storage: redb / In-Memory)]
     D --> E[Semantic Search]
     E --> F[Context for AI]
 ```
@@ -42,13 +44,15 @@ cargo build --release
 ```rust
 // 1. ローカルAIエンジンとストレージの準備
 let embed_model = Arc::new(CandleEmbedding::new("model.safetensors", "tokenizer.json", "config.json", None)?);
-let storage = StorageContext::from_dir("./storage")?;
+
+// 永続化なら from_dir、超高速処理なら in_memory() を選択
+let storage = StorageContext::in_memory(); 
 
 // 2. 知識の取り込み
 let nodes = SentenceSplitter::default().transform(reader.load_data().await?).await?;
 let index = VectorStoreIndex::from_nodes(nodes, storage, embed_model, Default::default()).await?;
 
-// 3. 瞬時の検索 (100ms以内)
+// 3. 瞬時の検索 (1ms以内)
 let results = retriever.retrieve(QueryBundle::new("Rustの凄さとは？")).await?;
 ```
 

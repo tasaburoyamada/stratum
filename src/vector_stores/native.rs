@@ -1,3 +1,4 @@
+#![cfg(feature = "persistence")]
 use crate::core::schema::Node;
 use crate::vector_stores::base::VectorStore;
 use crate::vector_stores::types::{VectorStoreQuery, VectorStoreQueryResult};
@@ -135,8 +136,11 @@ impl VectorStore for NativeVectorStore {
         let f32_query: Vec<f32> = query_embedding.iter().map(|&x| f32::from(x)).collect();
 
         let search_k = if query.filters.is_some() { query.similarity_top_k * 5 } else { query.similarity_top_k };
-        let hnsw = self.hnsw.read().unwrap();
-        let neighbors = hnsw.search(&f32_query, search_k, 200);
+        
+        let neighbors = {
+            let hnsw = self.hnsw.read().unwrap();
+            hnsw.search(&f32_query, search_k, 200)
+        };
 
         let read_txn = self.db.begin_read()?;
         let mapping_table = read_txn.open_table(MAPPING_TABLE)?;

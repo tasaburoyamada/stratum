@@ -18,6 +18,7 @@ pub mod vector_stores {
     pub mod base;
     pub mod utils;
     pub mod simple;
+    #[cfg(feature = "persistence")]
     pub mod native;
 }
 pub mod llm;
@@ -67,6 +68,7 @@ pub mod storage {
         pub mod base;
         pub mod types;
         pub mod simple;
+        #[cfg(feature = "persistence")]
         pub mod redb_docstore;
     }
 }

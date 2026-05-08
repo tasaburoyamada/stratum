@@ -1,3 +1,4 @@
+#![cfg(feature = "persistence")]
 use crate::storage::index_store::base::{IndexStore, IndexStruct};
 use anyhow::Result;
 use async_trait::async_trait;

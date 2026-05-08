@@ -1,3 +1,4 @@
+#![cfg(feature = "persistence")]
 use crate::core::schema::Node;
 use crate::storage::docstore::base::DocumentStore;
 use crate::storage::docstore::types::RefDocInfo;

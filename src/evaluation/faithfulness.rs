@@ -3,6 +3,7 @@ use crate::llm::LlmClient;
 use async_trait::async_trait;
 use anyhow::Result;
 use std::sync::Arc;
+use regex::Regex;
 
 pub struct FaithfulnessEvaluator {
     llm: Arc<dyn LlmClient>,
@@ -40,21 +41,25 @@ impl BaseEvaluator for FaithfulnessEvaluator {
 
         let eval_raw = self.llm.complete(&prompt).await?;
         
-        let json_str = if let Some(start) = eval_raw.find('{') {
-            if let Some(end) = eval_raw.rfind('}') {
-                &eval_raw[start..=end]
-            } else {
-                &eval_raw
-            }
+        let re = Regex::new(r"(?s)\{.*?\}").unwrap();
+        let json_str = if let Some(cap) = re.find(&eval_raw) {
+            cap.as_str()
         } else {
             &eval_raw
         };
 
         let result: serde_json::Value = serde_json::from_str(json_str).unwrap_or_else(|_| {
+            // Fallback parsing just in case JSON is completely broken but contains Score: 1.0
+            let score_re = Regex::new(r"(?i)score\s*[:=]\s*([0-9.]+)").unwrap();
+            let score = score_re.captures(&eval_raw)
+                .and_then(|c| c.get(1))
+                .and_then(|m| m.as_str().parse::<f64>().ok())
+                .unwrap_or(0.0);
+                
             serde_json::json!({
-                "score": 0.0,
-                "feedback": "Failed to parse LLM response as JSON",
-                "passing": false
+                "score": score,
+                "feedback": "Failed to parse LLM response as JSON. Used fallback regex.",
+                "passing": score >= 0.7
             })
         });
 

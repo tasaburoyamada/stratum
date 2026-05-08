@@ -54,7 +54,9 @@ impl HierarchicalIndex {
         storage_context: StorageContext,
         llm: Arc<dyn LlmClient>,
     ) -> Result<Self> {
-        let index_id = format!("hidx_{}", blake3::hash(b"hierarchical_index"));
+        let mut rng = rand::thread_rng();
+        let unique_suffix: u64 = rand::Rng::gen(&mut rng);
+        let index_id = format!("hidx_{:x}", unique_suffix);
         
         // 1. Initial nodes are the leaves
         let mut current_level_nodes = nodes;

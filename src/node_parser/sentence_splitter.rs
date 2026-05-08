@@ -139,10 +139,12 @@ impl Transformation for SentenceSplitter {
                 let metadata_len = self.count_tokens(&metadata_str);
                 
                 if metadata_len >= self.config.chunk_size {
-                    return Err(anyhow::anyhow!(
-                        "Metadata length ({}) exceeds or equals chunk_size ({}). Cannot split node {}.", 
+                    log::warn!(
+                        "Metadata length ({}) exceeds or equals chunk_size ({}). Skipping split for node {}.", 
                         metadata_len, self.config.chunk_size, node.id_
-                    ));
+                    );
+                    all_new_nodes.push(node);
+                    continue;
                 }
 
                 let effective_chunk_size = self.config.chunk_size - metadata_len;
@@ -212,3 +214,7 @@ impl Transformation for SentenceSplitter {
         hasher.finalize().to_hex().to_string()
     }
 }
+
+#[cfg(test)]
+#[path = "sentence_splitter_tests.rs"]
+mod tests;

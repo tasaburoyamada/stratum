@@ -9,3 +9,4 @@ Cargo.lock
 # OS files
 .DS_Store
 Thumbs.db
+selector_feeding.jsonl

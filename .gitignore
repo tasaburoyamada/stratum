@@ -16,3 +16,4 @@ selector_feeding.jsonl
 *.redb
 *.whl
 *.tar.gz
+/logs/

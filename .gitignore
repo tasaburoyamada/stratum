@@ -10,3 +10,9 @@ Cargo.lock
 .DS_Store
 Thumbs.db
 selector_feeding.jsonl
+/benchmarks/
+/models/
+/target/
+*.redb
+*.whl
+*.tar.gz

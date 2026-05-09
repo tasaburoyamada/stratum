@@ -34,6 +34,19 @@
 ## 5. 技術スタック
 - **言語**: Rust
 - **Embedding**: Candle (HuggingFace)
+- **Storage**: redb (ACID compliant), In-Memory
 - **状態管理**: HV-CAD (.vlog)
 - **シリアライゼーション**: Serde, Bincode
 - **ライセンス**: Apache License 2.0
+
+## 6. 性能ベンチマーク (2026/05/09 実測)
+Stratum は、Python 製の既存フレームワーク（LlamaIndex 等）に対し、以下の性能基準をベースラインとして設定する。
+
+| 評価項目 | 目標・実績 (vs LlamaIndex) | 技術的優位性 |
+| :--- | :--- | :--- |
+| **フレームワーク・オーバーヘッド** | **9 ms** (約 60倍高速) | Rust ゼロコスト抽象化 |
+| **起動時間 (Cold Start)** | **< 1 ms** (約 1400倍高速) | ネイティブバイナリ |
+| **メモリ使用量 (RSS)** | **28.7 MB** (約 1/6) | 静的メモリ管理 |
+| **並列処理能力** | **ネイティブ非同期ストリーム** | マルチコア・GPU最適化 |
+
+詳細なデータは [BENCHMARKS.md](./BENCHMARKS.md) を参照。

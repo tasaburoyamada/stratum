@@ -1,4 +1,3 @@
-
 use rig::vector_store::in_memory_store::InMemoryVectorStore;
 use rig::vector_store::VectorStoreIndex;
 use rig::embeddings::EmbeddingModel;
@@ -19,11 +18,13 @@ impl EmbeddingModel for MockEmbedding {
         &self,
         texts: impl IntoIterator<Item = String> + Send,
     ) -> impl std::future::Future<Output = Result<Vec<rig::embeddings::Embedding>, EmbeddingError>> + Send {
-        let count = texts.into_iter().count();
+        let texts_vec: Vec<String> = texts.into_iter().collect();
+        let count = texts_vec.len();
         async move {
-            std::thread::sleep(Duration::from_millis(50 * count as u64));
+            // Parallel simulation: 50ms total for the whole batch
+            tokio::time::sleep(Duration::from_millis(50)).await;
             let mut embeddings = Vec::with_capacity(count);
-            for i in 0..count {
+            for (i, _) in texts_vec.iter().enumerate() {
                 embeddings.push(rig::embeddings::Embedding {
                     document: format!("doc_{}", i),
                     vec: vec![0.1; 384],
@@ -34,15 +35,32 @@ impl EmbeddingModel for MockEmbedding {
     }
 }
 
+fn get_mem_mb() -> f64 {
+    std::fs::read_to_string("/proc/self/status")
+        .unwrap_or_default()
+        .lines()
+        .find(|l| l.starts_with("VmRSS:"))
+        .and_then(|l| l.split_whitespace().nth(1))
+        .and_then(|v| v.parse::<f64>().ok())
+        .map(|v| v / 1024.0)
+        .unwrap_or(0.0)
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let total_start = Instant::now();
-    let startup_start = Instant::now();
     let model = MockEmbedding;
-    let startup_time = startup_start.elapsed();
 
     let mut docs = Vec::new();
-    let paths = fs::read_dir("../data_large").or_else(|_| fs::read_dir("benchmarks/data_large"))?;
+    let data_path = if fs::metadata("benchmarks/data_large").is_ok() {
+        "benchmarks/data_large"
+    } else if fs::metadata("data_large").is_ok() {
+        "data_large"
+    } else {
+        "../data_large"
+    };
+
+    let paths = fs::read_dir(data_path)?;
     for path in paths {
         let p = path?.path();
         if p.extension().map_or(false, |ext| ext == "md") {
@@ -71,14 +89,12 @@ async fn main() -> anyhow::Result<()> {
     let _ = index.top_n::<serde_json::Value>("What is the advantage of using Rust and PyO3 together in Stratum?", 1).await.unwrap();
     let query_latency = query_start.elapsed();
 
-    let mem = std::fs::read_to_string("/proc/self/status")?.lines().find(|l| l.starts_with("VmRSS:")).unwrap_or_default().to_string();
+    let mem = get_mem_mb();
 
-    println!("--- Rig Results ---");
-    println!("Startup Time: {:?}", startup_time);
-    println!("Ingestion Time (100 docs): {:?}", ingestion_time);
-    println!("Query Latency: {:?}", query_latency);
-    println!("Memory Usage (RSS): {}", mem);
-    println!("Total Execution: {:?}", total_start.elapsed());
+    println!("--- Rig Results (Parallel Mock) ---");
+    println!("Ingestion Time (100 docs): {} ms", ingestion_time.as_millis());
+    println!("Query Latency: {} ms", query_latency.as_millis());
+    println!("Memory Usage (RSS): {:.2} MB", mem);
+    println!("Total Execution: {} ms", total_start.elapsed().as_millis());
     Ok(())
 }
-

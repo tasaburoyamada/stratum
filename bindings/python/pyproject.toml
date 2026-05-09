@@ -5,10 +5,15 @@ build-backend = "maturin"
 [project]
 name = "stratum-rag"
 version = "0.1.0"
-description = "High-performance RAG backend (Rust core)"
+description = "High-performance, AI-native RAG engine powered by Rust. Blazingly fast ingestion and retrieval for local LLM applications."
+readme = "README.md"
 requires-python = ">=3.8"
+authors = [{ name = "Stratum Maintainers" }]
+license = { text = "Apache-2.0" }
+keywords = ["rag", "rust", "llm", "search", "ai"]
 classifiers = [
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Rust",
-    "Programming Language :: Python :: Implementation :: CPython",
-    "Programming Language :: Python :: Implementation :: PyPy",
+    "Programming Language :: Python :: 3",
 ]

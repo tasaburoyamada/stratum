@@ -20,8 +20,8 @@ indicatif = "0.17"
 futures = "0.3"
 regex = "1.0"
 tiktoken-rs = "0.6"
-candle-core = { version = "0.10", features = ["cuda"] }
-candle-nn = { version = "0.10", features = ["cuda"] }
+candle-core = { version = "0.10" }
+candle-nn = { version = "0.10" }
 candle-transformers = "0.10"
 tokenizers = "0.21"
 walkdir = "2.3"

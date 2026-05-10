@@ -7,6 +7,7 @@ use indicatif::ProgressBar;
 pub struct IngestionPipeline {
     pub transformations: Vec<Arc<dyn Transformation>>,
     pub docstore: Option<Arc<dyn crate::storage::docstore::base::DocumentStore>>,
+    pub cache: Option<std::sync::Arc<std::sync::Mutex<super::cache::IngestionCache>>>,
 }
 
 impl IngestionPipeline {
@@ -14,7 +15,12 @@ impl IngestionPipeline {
         transformations: Vec<Arc<dyn Transformation>>, 
         docstore: Option<Arc<dyn crate::storage::docstore::base::DocumentStore>>
     ) -> Self {
-        Self { transformations, docstore }
+        Self { transformations, docstore, cache: None }
+    }
+
+    pub fn with_cache(mut self, cache: std::sync::Arc<std::sync::Mutex<super::cache::IngestionCache>>) -> Self {
+        self.cache = Some(cache);
+        self
     }
 
     pub async fn run(&self, nodes: Vec<Node>) -> Result<Vec<Node>> {
@@ -22,19 +28,27 @@ impl IngestionPipeline {
         let mut processed_info = Vec::new();
 
         // 1. Deduplication (Phase 0)
-        // NOTE: We track the hash of the ORIGINAL source nodes to avoid re-processing the same content.
-        // This means if transformations (e.g. chunk size) change but the source document remains the same,
-        // it will STILL be skipped. This is a design choice to save compute, but users should be aware.
         for node in nodes {
             let hash = node.hash();
             let mut exists = false;
 
-            if let Some(ds) = &self.docstore {
-                // Check if document with this ID and hash already exists
-                if let Ok(Some(existing_hash)) = ds.get_document_hash(&node.id_).await {
-                    if existing_hash == hash {
-                        log::info!("Node {} with same hash already exists. Skipping.", node.id_);
-                        exists = true;
+            // Use Pipeline Cache first for speed
+            if let Some(cache_lock) = &self.cache {
+                let mut cache = cache_lock.lock().map_err(|_| anyhow::anyhow!("ERR_LOCK_POISONED"))?;
+                if cache.check_and_update(&node.id_, &hash) {
+                    log::info!("Node {} unchanged in cache. Skipping.", node.id_);
+                    exists = true;
+                }
+            }
+
+            // Fallback to DocStore if no cache or double verification
+            if !exists {
+                if let Some(ds) = &self.docstore {
+                    if let Ok(Some(existing_hash)) = ds.get_document_hash(&node.id_).await {
+                        if existing_hash == hash {
+                            log::info!("Node {} already in DocStore. Skipping.", node.id_);
+                            exists = true;
+                        }
                     }
                 }
             }

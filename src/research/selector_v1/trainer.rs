@@ -1,58 +1,53 @@
 use crate::research::selector_v1::model::VectorSelector;
-use crate::embeddings::base::Embedding;
-use crate::feeding::SelectorTriplet;
-use candle_core::{Tensor, Device, Result};
-use candle_nn::{VarMap, VarBuilder, Optimizer, AdamW, ParamsAdamW};
-use std::sync::Arc;
+use candle_core::{Device, Result, Tensor};
+use candle_nn::{AdamW, Optimizer, ParamsAdamW, VarBuilder, VarMap};
 
 pub struct SelectorTrainer {
     model: VectorSelector,
     varmap: VarMap,
-    embed_model: Arc<dyn Embedding>,
     device: Device,
 }
 
 impl SelectorTrainer {
-    pub fn new(dim: usize, embed_model: Arc<dyn Embedding>) -> Result<Self> {
+    pub fn new(dim: usize) -> Result<Self> {
         let device = Device::Cpu;
         let varmap = VarMap::new();
         let vb = VarBuilder::from_varmap(&varmap, candle_core::DType::F32, &device);
         let model = VectorSelector::new(dim, vb)?;
-        Ok(Self { model, varmap, embed_model, device })
+        Ok(Self { model, varmap, device })
     }
 
-    pub async fn train_on_triplets(&mut self, triplets: Vec<SelectorTriplet>) -> Result<()> {
+    pub fn train_on_tensors(&mut self, queries: &Tensor, choices: &Tensor, parents: &Tensor, targets: &Tensor, epochs: usize) -> Result<()> {
         let mut opt = AdamW::new(self.varmap.all_vars(), ParamsAdamW::default())?;
+        
+        let batch_size = queries.dim(0)?;
+        println!("🏋️ Training on batch of {} samples for {} epochs...", batch_size, epochs);
 
-        for triplet in triplets {
-            let q_emb = self.embed_model.get_text_embedding(&triplet.query).await
-                .map_err(|e| candle_core::Error::Msg(e.to_string()))?;
-            let p_emb = self.embed_model.get_text_embedding(&triplet.parent_context).await
-                .map_err(|e| candle_core::Error::Msg(e.to_string()))?;
-
-            let q_tensor = Tensor::from_vec(q_emb.iter().map(|&x| f32::from(x)).collect(), (1, q_emb.len()), &self.device)?;
-            let p_tensor = Tensor::from_vec(p_emb.iter().map(|&x| f32::from(x)).collect(), (1, p_emb.len()), &self.device)?;
-
-            for (i, choice) in triplet.choices.iter().enumerate() {
-                let c_emb = self.embed_model.get_text_embedding(choice).await
-                    .map_err(|e| candle_core::Error::Msg(e.to_string()))?;
-                let c_tensor = Tensor::from_vec(c_emb.iter().map(|&x| f32::from(x)).collect(), (1, c_emb.len()), &self.device)?;
-
-                let target = if triplet.selected_indices.contains(&i) { 1.0f32 } else { 0.0f32 };
-                let target_tensor = Tensor::from_vec(vec![target], (1, 1), &self.device)?;
-
-                // Forward pass
-                let pred = self.model.forward(&q_tensor, &c_tensor, &p_tensor)?;
-                
-                // Manual BCE Loss: -(y * log(p) + (1-y) * log(1-p))
-                let loss = ((target_tensor.clone() * pred.log()?)? + 
-                          ((target_tensor.neg()? + 1.0)? * (pred.neg()? + 1.0)?.log()?)?)?.neg()?;
-                let loss = loss.mean_all()?;
-                
-                // Backward and step
-                opt.backward_step(&loss)?;
+        for epoch in 0..epochs {
+            // Forward pass
+            let pred = self.model.forward(queries, choices, parents)?;
+            
+            // Manual BCE Loss: -(y * log(p) + (1-y) * log(1-p))
+            // Adding a small epsilon 1e-7 to prevent log(0)
+            let term1 = (targets.clone() * (pred.clone() + 1e-7)?.log()?)?;
+            let term2 = ((targets.neg()? + 1.0)? * ((pred.neg()? + 1.0)? + 1e-7)?.log()?)?;
+            
+            let loss = (term1 + term2)?.neg()?;
+            let loss = loss.mean_all()?;
+            
+            // Backward and step
+            opt.backward_step(&loss)?;
+            
+            if (epoch + 1) % 10 == 0 || epoch == epochs - 1 {
+                println!("Epoch {}/{} - Loss: {:?}", epoch + 1, epochs, loss.to_vec0::<f32>()?);
             }
         }
+        Ok(())
+    }
+
+    pub fn save(&self, path: &str) -> Result<()> {
+        self.varmap.save(path)?;
+        println!("💾 Model weights saved to {}", path);
         Ok(())
     }
 }

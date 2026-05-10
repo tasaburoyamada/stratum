@@ -32,6 +32,7 @@ pdf-extract = "0.7"
 scraper = "0.17"
 html2md = "0.2"
 rand = "0.8"
+hf-hub = "0.5.0"
 
 [features]
 default = ["persistence"]
@@ -44,3 +45,15 @@ env_logger = "0.11"
 tokio = { version = "1.0", features = ["full"] }
 anyhow = "1.0"
 
+
+[[bin]]
+name = "pre_embed"
+path = "src/research/selector_v1/bin/pre_embed.rs"
+
+[[bin]]
+name = "train_selector"
+path = "src/bin/train_selector.rs"
+
+[[bin]]
+name = "synthesize_data"
+path = "src/research/selector_v1/bin/synthesize_data.rs"

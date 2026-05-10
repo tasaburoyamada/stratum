@@ -1,44 +1,43 @@
 use crate::research::selector_v1::trainer::SelectorTrainer;
-use crate::research::selector_v1::data_loader::SelectorDataLoader;
-use crate::embeddings::candle::CandleEmbedding;
-use anyhow::Result;
-use std::sync::Arc;
+use candle_core::{safetensors::load, Device};
+use anyhow::{Result, anyhow};
 
-/// Prototype script to run a research training session.
+/// Prototype script to run a research training session using pre-computed embeddings.
 pub async fn run_research_v1() -> Result<()> {
-    println!("🧪 Starting Stratum Selector-v1 Research...");
+    println!("🧪 Starting Stratum Selector-v1 Research (High-Speed Batch Mode)...");
 
-    // 1. Setup Environment
-    // Paths are based on the common cached models in this project
-    let model_dir = "lasada/.fastembed_cache/models--Qdrant--all-MiniLM-L6-v2-onnx/snapshots/5f1b8cd78bc4fb444dd171e59b18f3a3af89a079";
-    let model_path = format!("{}/model.onnx", model_dir);
-    let tokenizer_path = format!("{}/tokenizer.json", model_dir);
-    let config_path = format!("{}/config.json", model_dir);
+    let device = Device::Cpu;
+    let data_path = "stratum/precomputed_embeddings.safetensors";
 
-    let embed_model = Arc::new(CandleEmbedding::new(
-        &model_path,
-        &tokenizer_path,
-        &config_path,
-        None
-    )?);
+    // 1. Load Pre-computed Tensors
+    println!("Loading pre-computed embeddings from {}...", data_path);
+    let tensors = match load(data_path, &device) {
+        Ok(t) => t,
+        Err(_) => {
+            println!("⚠️ Could not load {}. Please run `cargo run --bin pre_embed` first.", data_path);
+            return Ok(());
+        }
+    };
 
-    // 2. Load Data
-    let loader = SelectorDataLoader::new("selector_feeding.jsonl");
-    let triplets = loader.load_all()?;
-    println!("📊 Loaded {} triplets for distillation.", triplets.len());
+    let queries = tensors.get("queries").ok_or(anyhow!("Missing 'queries' tensor"))?;
+    let parents = tensors.get("parents").ok_or(anyhow!("Missing 'parents' tensor"))?;
+    let choices = tensors.get("choices").ok_or(anyhow!("Missing 'choices' tensor"))?;
+    let targets = tensors.get("targets").ok_or(anyhow!("Missing 'targets' tensor"))?;
 
-    if triplets.is_empty() {
-        println!("⚠️ No data found in selector_feeding.jsonl. Run some hierarchical queries first!");
-        return Ok(());
-    }
+    println!("📊 Loaded batch of {} samples.", queries.dim(0)?);
 
-    // 3. Initialize Trainer
-    let mut trainer = SelectorTrainer::new(384, embed_model)?;
+    // 2. Initialize Trainer
+    // The embedding dimension is 384 (all-MiniLM-L6-v2)
+    let mut trainer = SelectorTrainer::new(384)?;
 
-    // 4. Run Training
-    println!("🚀 Distilling intelligence from LLM to VectorSelector...");
-    trainer.train_on_triplets(triplets).await?;
+    // 3. Run Training (e.g., 50 epochs)
+    println!("🚀 Distilling intelligence...");
+    trainer.train_on_tensors(queries, choices, parents, targets, 50)?;
     println!("✅ Training step completed.");
+
+    // 4. Save Model
+    let save_path = "stratum/src/research/selector_v1/selector_weights.safetensors";
+    trainer.save(save_path)?;
 
     Ok(())
 }

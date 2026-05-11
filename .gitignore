@@ -17,3 +17,4 @@ selector_feeding.jsonl
 *.whl
 *.tar.gz
 /logs/
+precomputed_embeddings.safetensors

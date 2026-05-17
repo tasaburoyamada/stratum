@@ -1,7 +1,7 @@
 use stratum::llm::{LlmClient, gemini::GeminiClient};
 use stratum::feeding::SelectorTriplet;
 use stratum::feeding::DatasetExporter;
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use std::env;
 use std::sync::Arc;
 use serde_json::Value;

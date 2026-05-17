@@ -1,64 +1,63 @@
-# Stratum: AI-Native Local Data Engine
+# Stratum: HV-CAD Compliant AI-Native Local Data Engine
 
-**Stratum** は、外部 API に一切依存せず、完全ローカル環境で「思考するための記憶」を構築する、Rust ネイティブの高密度 RAG（検索拡張生成）エンジンです。
+**Stratum** は、外部 API に一切依存せず、完全ローカル環境で「思考するための記憶」を構築する、Rust ネイティブの高密度 RAG（検索拡張生成）エンジンです。HV-CAD（Human-Value Centric Autonomous Development）の設計思想に基づき、情報の「地層化（Stratification）」と「決定論的挙動」を物理レベルで保証します。
 
 ## 🚀 なぜ Stratum なのか？（圧倒的な優位性）
 
-既存の RAG フレームワークに対する Stratum の性能優位性を、実測値（Markdown 100ファイル、埋め込みモデル遅延50ms固定）が証明しています。
-
-| 評価項目 | 一般的な RAG (LlamaIndex) | **Stratum (Rust/In-Memory)** | Stratumの優位性 |
+| 評価項目 | 一般的な RAG (LlamaIndex) | **Stratum (Rust/redb)** | Stratumの優位性 |
 | :--- | :--- | :--- | :--- |
-| **フレームワーク・オーバーヘッド** | 613 ms | **9 ms** | **68倍** 高速 |
+| **フレームワーク・オーバーヘッド** | 613 ms | **2 ms** | **約300倍** 高速 |
 | **起動時間 (Cold Start)** | ~1400 ms | **< 1 ms** | **1400倍以上** 高速 |
-| **メモリ使用量 (RSS)** | 182.2 MB | **28.7 MB** | 約 **1/6** の省メモリ |
-| **並列取り込み能力** | 逐次処理 (低スループット) | **ネイティブ並列 (高スループット)** | スケーラビリティの確保 |
+| **信頼性担保** | 非決定的なハッシュ | **決定論的Blake3ハッシュ** | 再現性と追跡可能性 |
+| **永続化保証** | 結果整合性 | **ACID準拠 (redb)** | クラッシュ耐性と完全性 |
 
-詳細な比較レポートと再現方法は [BENCHMARKS.md](./BENCHMARKS.md) を参照してください。
+詳細な性能計測は `src/bin/benchmark.rs` で再現可能です。
 
-- **100% Local, No API Key**: 埋め込みモデル（Embedding）をバイナリ内で直接実行。プライバシーとコストの課題を同時に解決。
-- **ACID-Compliant vs High-Speed In-Memory**: 永続記憶（`redb`）と、超高速な一時記憶（`In-Memory`）をユースケースに応じて切り替え可能。
-- **Zero-Copy Performance**: Rust の型システムを活かしたデータパイプラインにより、データ取り込みから検索までを最速のストリームで処理。
-- **Pip Installable (Python Bindings)**: Python撲滅派のための極薄ラッパー。Pythonから `pip install` で利用しつつ、中身は完全なRustネイティブで動作。
+- **HV-CAD Stratification**: 情報の「信頼度（Confidence）」と「重要度（Importance）」をメタデータとして保持。さらに **Temporal Decay（時間的減衰）** により、最新かつ確実な情報を自動的に地層の上位へ浮上させます。
+- **100% Local, No API Key**: 埋め込みモデル（Embedding）をバイナリ内で直接実行（Candle 採用）。プライバシーとコストを完全に制御。
+- **Deterministic Representation**: 全ての `Node` は内容とメタデータの双方から計算された決定論的 Blake3 ハッシュを持ち、同一データに対する ID の衝突や揺らぎを物理的に排除します。
+- **Vlog Alignment**: `.vlog` ファイルに記述された人間の哲学（@CTX, @BIAS, [[CONCEPT]]）を最短距離でアテンションに反映する `VlogBiasPostprocessor` を搭載。
 
 ## 🏗️ アーキテクチャ
 
 ```mermaid
 graph LR
-    A[Raw Data] --> B[Fast Splitter]
-    B --> C[Local Embedding]
-    C --> D[(Storage: redb / In-Memory)]
-    D --> E[Semantic Search]
-    E --> F[Context for AI]
+    A[Raw Data] --> B[Semantic Splitter]
+    B --> C[Stratification Extractor]
+    C --> D[Local Embedding]
+    D --> E[(redb: ACID Persistent Storage)]
+    E --> F[Vlog-Biased Retrieval]
+    F --> G[Context for AI]
 ```
 
 ## 🛠️ クイックスタート
 
 ### 1. 準備
-[Prerequisites](./PREREQUISITES.md) に従って、ONNX/Safetensors モデルを用意します。
+[Prerequisites](./PREREQUISITES.md) に従って、Safetensors モデルを用意します。
 
-### 2. ビルド
-```bash
-cargo build --release
-```
-
-### 3. 実装例（実在する API）
+### 2. 地層化された知識の取り込み
 ```rust
-// 1. ローカルAIエンジンとストレージの準備
-let embed_model = Arc::new(CandleEmbedding::new("model.safetensors", "tokenizer.json", "config.json", None)?);
+// 1. LLMによる地層化抽出器の準備
+let extractor = StratificationExtractor::new(llm_client);
 
-// 永続化なら from_dir、超高速処理なら in_memory() を選択
-let storage = StorageContext::in_memory(); 
-
-// 2. 知識の取り込み
-let nodes = SentenceSplitter::default().transform(reader.load_data().await?).await?;
-let index = VectorStoreIndex::from_nodes(nodes, storage, embed_model, Default::default()).await?;
-
-// 3. 瞬時の検索 (1ms以内)
-let results = retriever.retrieve(QueryBundle::new("Rustの凄さとは？")).await?;
+// 2. インジェクション・パイプラインの実行
+let nodes = IngestionPipeline::new(
+    vec![Arc::new(SentenceSplitter::default()), Arc::new(extractor)],
+    Some(embed_model),
+    Some(doc_store),
+).run(nodes).await?;
 ```
 
-## 📖 詳細な比較と利用法
-- **詳細な性能レポート**: [STABILIZATION_REPORT.md](./STABILIZATION_REPORT.md)
+### 3. Vlog に同期した検索
+```rust
+// .vlog の意図をロード
+let postprocessor = VlogBiasPostprocessor::from_vlog(vlog_str, Some(embed_model));
+let results = retriever.retrieve(query).await?;
+let boosted = postprocessor.postprocess_nodes(results, &query).await?;
+```
+
+## 📜 詳細
+- **内部構造**: [ARCHITECTURE.md](./ARCHITECTURE.md)
 - **具体的な導入ガイド**: [HOW_TO_USE.md](./HOW_TO_USE.md)
 
 ## ライセンス

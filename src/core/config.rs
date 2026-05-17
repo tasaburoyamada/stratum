@@ -67,7 +67,7 @@ impl Default for WebConfig {
             delay_ms: 1000,
             jitter_ms: 500,
             concurrency: 1,
-            user_agent: "LlamaIndex-rs/0.1.0 (Polite-Crawler)".to_string(),
+            user_agent: "Stratum-Knowledge-Engine/0.4.0 (Polite-Crawler)".to_string(),
         }
     }
 }

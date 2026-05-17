@@ -2,7 +2,7 @@ use crate::indices::hierarchical::selector::NodeSelector;
 use crate::embeddings::base::Embedding;
 use crate::core::schema::Node;
 use async_trait::async_trait;
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use std::sync::Arc;
 use candle_core::{Tensor, Device, Module};
 use candle_nn::{Linear, VarBuilder, ops};

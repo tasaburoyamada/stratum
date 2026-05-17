@@ -70,13 +70,13 @@ impl VectorStore for NativeVectorStore {
     async fn add(&self, nodes: Vec<Node>) -> Result<Vec<String>> {
         let write_txn = self.db.begin_write()?;
         let mut ids = Vec::new();
+        let mut pending_index_updates = Vec::new();
 
         {
             let mut emb_table = write_txn.open_table(EMBEDDINGS_TABLE)?;
             let mut mapping_table = write_txn.open_table(MAPPING_TABLE)?;
             let mut reverse_table = write_txn.open_table(REVERSE_MAPPING_TABLE)?;
             let mut nodes_table = write_txn.open_table(NODES_TABLE)?;
-            let hnsw = self.hnsw.write().unwrap();
 
             let mut next_id = 0;
             if let Some(last) = mapping_table.iter()?.next_back() {
@@ -99,14 +99,24 @@ impl VectorStore for NativeVectorStore {
                     reverse_table.insert(node_id.as_str(), next_id)?;
 
                     let f32_emb: Vec<f32> = embedding.iter().map(|&x| f32::from(x)).collect();
-                    hnsw.insert((&f32_emb, next_id as usize));
+                    pending_index_updates.push((f32_emb, next_id as usize));
 
                     ids.push(node_id);
                     next_id += 1;
                 }
             }
         }
+        
+        // COMMIT FIRST: ensure physical persistence before updating memory index
         write_txn.commit()?;
+
+        // Now update the memory index (HNSW)
+        {
+            let hnsw = self.hnsw.write().unwrap();
+            for (f32_emb, id) in pending_index_updates {
+                hnsw.insert((&f32_emb, id));
+            }
+        }
 
         Ok(ids)
     }
@@ -128,6 +138,8 @@ impl VectorStore for NativeVectorStore {
             }
         }
         write_txn.commit()?;
+        // HNSW deletion is complex in native hnsw_rs (often requires rebuild or specific markers).
+        // For simplicity, we currently rely on query-time filtering against mapping_table.
         Ok(())
     }
 

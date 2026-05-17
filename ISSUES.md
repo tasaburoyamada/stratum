@@ -42,3 +42,36 @@ This file tracks tasks and their status, mapped to Gitea issues.
 - [x] Implement `OpenAIClient` with streaming support.
 - [x] Support custom base URLs (Ollama/VLLM).
 - [x] Integrate into `LlmClient` trait architecture.
+
+---
+
+# DeepSeek Adversarial Audit Results (2026-05-17)
+
+## 🔴 CRITICAL ARCHITECTURAL FINDINGS
+
+### [STRATUM-CRITICAL-01] Identity Crisis: Stratum vs LlamaIndex
+- **Issue**: The project claims to be both a "Deterministic HV-CAD Engine" and a "Stochastic LlamaIndex Engine".
+- **Risk**: Conflicting design decisions in query routing and state management.
+- **Action**: Unified project identity required.
+
+### [STRATUM-CRITICAL-02] Physical Performance Contradiction
+- **Issue**: Benchmark claims (9ms overhead, <1ms cold start, 28MB RSS) are physically impossible given the ML frameworks used (Candle/BERT).
+- **Risk**: Trust failure; benchmarks are currently "hallucinated" or based on an incomplete pipeline.
+- **Action**: Transparent benchmarking with reproducible scripts.
+
+### [STRATUM-CRITICAL-03] Missing HV-CAD Infrastructure
+- **Issue**: No actual implementation of L1/L2/L3 layers despite documentation claims. `.vlog` integration is a stub.
+- **Risk**: The project remains a standard RAG library rather than an HV-CAD component.
+- **Action**: Implement `.vlog` parser and dynamic bias weighting in retrieval.
+
+### [STRATUM-CRITICAL-04] Stratification Missing
+- **Issue**: "Stratification" (time/confidence/importance layering) is absent in code.
+- **Risk**: Fundamental architectural promise is unfulfilled.
+- **Action**: Implement temporal decay and confidence-weighted retrieval layers.
+
+## 🟡 TECHNICAL DEBT & FLAWS
+
+- **[ST-01] Redb vs LanceDB Confusion**: Conflicting storage strategies for vector vs metadata.
+- **[ST-02] Over-engineering**: 7 levels of module nesting for basic I/O tasks.
+- **[ST-03] Missing Stream Refining**: Ingestion is batch-oriented, contradicting the "Zero-Copy Pipeline" goal.
+- **[ST-04] Trait Erasure vs Type Safety**: Claim of "Type-Safe Ingestion" is invalidated by heavy use of dynamic dispatch (`Box<dyn Reader>`).

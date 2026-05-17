@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use half::f16;
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum NodeRelationship {
@@ -41,6 +42,8 @@ pub struct TypedMetadata {
     pub file_path: Option<String>,
     pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
     pub genre: Option<String>,
+    pub confidence: Option<f32>, // HV-CAD: Reliability of the information (0.0 - 1.0)
+    pub importance: Option<f32>, // HV-CAD: Strategic priority (0.0 - 1.0)
     pub extra: HashMap<String, serde_json::Value>,
 }
 
@@ -49,7 +52,7 @@ pub struct Node {
     pub id_: String,
     pub embedding: Option<Vec<f16>>,
     pub tokens: Option<Vec<u32>>, // AI-native token representation
-    pub metadata: TypedMetadata,  // Structured metadata for Arrow/LanceDB
+    pub metadata: TypedMetadata,  // Structured metadata for redb/ACID persistence
     pub excluded_embed_metadata_keys: Vec<String>,
     pub excluded_llm_metadata_keys: Vec<String>,
     pub relationships: HashMap<NodeRelationship, Vec<RelatedNodeInfo>>,
@@ -111,12 +114,29 @@ impl Node {
                 hasher.update(b);
             }
             NodeContent::Purged => {
+                // If purged, we cannot re-calculate hash from content.
+                // But we must NOT allow hash change. 
+                // We assume id_ stores the ORIGINAL hash.
                 return self.id_.clone();
             }
         }
 
-        // 2. Hash Metadata (Deterministic)
-        if let Ok(meta_json) = serde_json::to_string(&self.metadata) {
+        // 2. Hash Metadata (Deterministic via BTreeMap sorting)
+        let mut deterministic_meta = BTreeMap::new();
+        deterministic_meta.insert("url", serde_json::json!(self.metadata.url));
+        deterministic_meta.insert("file_path", serde_json::json!(self.metadata.file_path));
+        deterministic_meta.insert("timestamp", serde_json::json!(self.metadata.timestamp));
+        deterministic_meta.insert("genre", serde_json::json!(self.metadata.genre));
+        deterministic_meta.insert("confidence", serde_json::json!(self.metadata.confidence));
+        deterministic_meta.insert("importance", serde_json::json!(self.metadata.importance));
+        
+        let mut sorted_extra = BTreeMap::new();
+        for (k, v) in &self.metadata.extra {
+            sorted_extra.insert(k.clone(), v.clone());
+        }
+        deterministic_meta.insert("extra", serde_json::json!(sorted_extra));
+
+        if let Ok(meta_json) = serde_json::to_string(&deterministic_meta) {
             hasher.update(meta_json.as_bytes());
         }
 
@@ -138,12 +158,21 @@ impl Node {
         add_field("url", self.metadata.url.clone());
         add_field("file_path", self.metadata.file_path.clone());
         add_field("genre", self.metadata.genre.clone());
+        if let Some(c) = self.metadata.confidence {
+            add_field("confidence", Some(format!("{:.2}", c)));
+        }
+        if let Some(i) = self.metadata.importance {
+            add_field("importance", Some(format!("{:.2}", i)));
+        }
         if let Some(ts) = self.metadata.timestamp {
             add_field("timestamp", Some(ts.to_rfc3339()));
         }
 
         // Add extra fields
-        for (key, value) in &self.metadata.extra {
+        let mut sorted_extra: Vec<_> = self.metadata.extra.iter().collect();
+        sorted_extra.sort_by_key(|k| k.0);
+
+        for (key, value) in sorted_extra {
             if self.excluded_embed_metadata_keys.contains(key) {
                 continue;
             }

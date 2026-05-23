@@ -47,8 +47,13 @@ impl CandleEmbedding {
         file.read_exact(&mut header_buf).map_err(|_| anyhow!("Failed to read safetensors header"))?;
         let header_size = u64::from_le_bytes(header_buf);
         let file_metadata = std::fs::metadata(model_path)?;
-        if header_size == 0 || header_size > file_metadata.len() - 8 {
-            return Err(anyhow!("Invalid safetensors header size: {}", header_size));
+        
+        // PHYSICAL SECURITY: Strict header validation
+        if header_size == 0 || header_size > 100 * 1024 * 1024 { // 100MB limit for header
+            return Err(anyhow!("Safetensors header size exceeds sanity limit: {}", header_size));
+        }
+        if header_size > file_metadata.len().saturating_sub(8) {
+            return Err(anyhow!("Invalid safetensors header size (exceeds file size): {}", header_size));
         }
 
         let config = std::fs::read_to_string(config_path)?;

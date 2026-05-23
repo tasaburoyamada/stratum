@@ -135,7 +135,7 @@ impl Transformation for SentenceSplitter {
         for node in nodes {
             if let crate::core::schema::NodeContent::Text(text) = &node.content {
                 // 1. Calculate effective chunk size
-                let metadata_str = node.metadata_to_str();
+                let metadata_str = node.metadata_to_str(crate::core::schema::MetadataContext::Embedding);
                 let metadata_len = self.count_tokens(&metadata_str);
                 
                 if metadata_len >= self.config.chunk_size {

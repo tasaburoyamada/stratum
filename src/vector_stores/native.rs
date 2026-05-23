@@ -7,12 +7,22 @@ use async_trait::async_trait;
 use hnsw_rs::prelude::*;
 use redb::{Database, TableDefinition, ReadableTable};
 use std::sync::{Arc, RwLock};
+use rayon::prelude::*;
 
 // Optimization: Store embeddings separately for faster index rebuild
 const EMBEDDINGS_TABLE: TableDefinition<&str, Vec<u8>> = TableDefinition::new("embeddings");
 const MAPPING_TABLE: TableDefinition<u64, &str> = TableDefinition::new("mapping");
 const REVERSE_MAPPING_TABLE: TableDefinition<&str, u64> = TableDefinition::new("reverse_mapping");
 const NODES_TABLE: TableDefinition<&str, Vec<u8>> = TableDefinition::new("nodes");
+const METADATA_TABLE: TableDefinition<&str, u64> = TableDefinition::new("metadata");
+
+// Constants for tuning HNSW behavior
+const DEFAULT_DIM: usize = 384;
+const FILTER_SEARCH_MULTIPLIER: usize = 10;
+const MIN_SEARCH_K: usize = 100;
+const MAX_SEARCH_K: usize = 5000;
+const HNSW_EF_CONSTRUCTION: usize = 200;
+const HNSW_M: usize = 16;
 
 pub struct NativeVectorStore {
     db: Database,
@@ -22,24 +32,43 @@ pub struct NativeVectorStore {
 
 impl NativeVectorStore {
     pub fn new(path: &str, dim: usize) -> Result<Self> {
-        let db = Database::create(path)?;
+        let db = if std::path::Path::new(path).exists() {
+            Database::open(path)?
+        } else {
+            Database::create(path)?
+        };
 
-        // Initialize tables
-        {
+        // Initialize tables and check dimension
+        let final_dim = {
             let write_txn = db.begin_write()?;
-            {
+            let resolved_dim = {
                 let _ = write_txn.open_table(EMBEDDINGS_TABLE)?;
                 let _ = write_txn.open_table(MAPPING_TABLE)?;
                 let _ = write_txn.open_table(REVERSE_MAPPING_TABLE)?;
                 let _ = write_txn.open_table(NODES_TABLE)?;
-            }
+                let mut meta_table = write_txn.open_table(METADATA_TABLE)?;
+                
+                let stored_dim = meta_table.get("dim")?.map(|g| g.value() as usize);
+                
+                if let Some(s_dim) = stored_dim {
+                    if s_dim != dim && dim != 0 {
+                        return Err(anyhow::anyhow!("Dimension mismatch: stored={}, requested={}", s_dim, dim));
+                    }
+                    s_dim
+                } else {
+                    let d = if dim == 0 { DEFAULT_DIM } else { dim };
+                    meta_table.insert("dim", d as u64)?;
+                    d
+                }
+            };
             write_txn.commit()?;
-        }
+            resolved_dim
+        };
 
-        let hnsw = Hnsw::new(16, 100, 16, 200, DistCosine);
+        let hnsw = Hnsw::new(HNSW_M, 100, HNSW_M, HNSW_EF_CONSTRUCTION, DistCosine);
         let hnsw = Arc::new(RwLock::new(hnsw));
 
-        let store = Self { db, hnsw, dim };
+        let store = Self { db, hnsw, dim: final_dim };
         store.rebuild_index()?;
 
         Ok(store)
@@ -49,16 +78,36 @@ impl NativeVectorStore {
         let read_txn = self.db.begin_read()?;
         let embeddings_table = read_txn.open_table(EMBEDDINGS_TABLE)?;
         let reverse_table = read_txn.open_table(REVERSE_MAPPING_TABLE)?;
-        let hnsw = self.hnsw.write().unwrap();
+        
+        let mut raw_entries = Vec::new();
 
         for result in embeddings_table.iter()? {
             let (id, emb_bytes) = result?;
-            // Use JSON for metadata-like vectors to avoid bincode strictness issues
             let embedding: Vec<half::f16> = serde_json::from_slice(emb_bytes.value().as_slice())?;
-            let f32_emb: Vec<f32> = embedding.iter().map(|&x| f32::from(x)).collect();
             
+            if embedding.len() != self.dim {
+                log::error!("Embedding dimension mismatch for node {}: expected {}, found {}", id.value(), self.dim, embedding.len());
+                continue;
+            }
+
             if let Some(inner_id) = reverse_table.get(id.value())? {
-                hnsw.insert((&f32_emb, inner_id.value() as usize));
+                raw_entries.push((embedding, inner_id.value() as usize));
+            }
+        }
+        
+        // Parallel conversion using Rayon
+        let entries: Vec<(Vec<f32>, usize)> = raw_entries.into_par_iter()
+            .map(|(emb_f16, id)| {
+                let emb_f32: Vec<f32> = emb_f16.into_iter().map(f32::from).collect();
+                (emb_f32, id)
+            })
+            .collect();
+        
+        // Tight lock window for HNSW insertion
+        {
+            let hnsw = self.hnsw.write().map_err(|e| anyhow::anyhow!("Lock poisoned: {}", e))?;
+            for (emb, id) in entries {
+                hnsw.insert((&emb, id));
             }
         }
         Ok(())
@@ -68,10 +117,13 @@ impl NativeVectorStore {
 #[async_trait]
 impl VectorStore for NativeVectorStore {
     async fn add(&self, nodes: Vec<Node>) -> Result<Vec<String>> {
-        let write_txn = self.db.begin_write()?;
         let mut ids = Vec::new();
         let mut pending_index_updates = Vec::new();
 
+        // 1. Acquire HNSW lock FIRST to prevent race with query
+        let hnsw = self.hnsw.write().map_err(|e| anyhow::anyhow!("Lock poisoned: {}", e))?;
+        
+        let write_txn = self.db.begin_write()?;
         {
             let mut emb_table = write_txn.open_table(EMBEDDINGS_TABLE)?;
             let mut mapping_table = write_txn.open_table(MAPPING_TABLE)?;
@@ -86,6 +138,7 @@ impl VectorStore for NativeVectorStore {
             for node in nodes {
                 if let Some(embedding) = &node.embedding {
                     if embedding.len() != self.dim {
+                        log::warn!("Skipping node {} due to dimension mismatch", node.id_);
                         continue;
                     }
 
@@ -107,21 +160,19 @@ impl VectorStore for NativeVectorStore {
             }
         }
         
-        // COMMIT FIRST: ensure physical persistence before updating memory index
+        // 2. Commit DB change
         write_txn.commit()?;
 
-        // Now update the memory index (HNSW)
-        {
-            let hnsw = self.hnsw.write().unwrap();
-            for (f32_emb, id) in pending_index_updates {
-                hnsw.insert((&f32_emb, id));
-            }
+        // 3. Update HNSW index while still holding the lock
+        for (emb, id) in pending_index_updates {
+            hnsw.insert((&emb, id));
         }
 
         Ok(ids)
     }
 
     async fn delete(&self, node_id: &str) -> Result<()> {
+        let _hnsw_lock = self.hnsw.write().map_err(|e| anyhow::anyhow!("Lock poisoned: {}", e))?;
         let write_txn = self.db.begin_write()?;
         {
             let mut emb_table = write_txn.open_table(EMBEDDINGS_TABLE)?;
@@ -138,8 +189,6 @@ impl VectorStore for NativeVectorStore {
             }
         }
         write_txn.commit()?;
-        // HNSW deletion is complex in native hnsw_rs (often requires rebuild or specific markers).
-        // For simplicity, we currently rely on query-time filtering against mapping_table.
         Ok(())
     }
 
@@ -147,10 +196,12 @@ impl VectorStore for NativeVectorStore {
         let query_embedding = query.query_embedding.ok_or_else(|| anyhow::anyhow!("ERR_VS_QUERY_EMBEDDING_MISSING"))?;
         let f32_query: Vec<f32> = query_embedding.iter().map(|&x| f32::from(x)).collect();
 
-        let search_k = if query.filters.is_some() { query.similarity_top_k * 5 } else { query.similarity_top_k };
+        // If filters are present, we search deeper (up to multiplier * top_k) to find matches
+        let search_k = if query.filters.is_some() { (query.similarity_top_k * FILTER_SEARCH_MULTIPLIER).max(MIN_SEARCH_K).min(MAX_SEARCH_K) } 
+                       else { query.similarity_top_k };
         
         let neighbors = {
-            let hnsw = self.hnsw.read().unwrap();
+            let hnsw = self.hnsw.read().map_err(|e| anyhow::anyhow!("Lock poisoned: {}", e))?;
             hnsw.search(&f32_query, search_k, 200)
         };
 
@@ -166,6 +217,7 @@ impl VectorStore for NativeVectorStore {
             if count >= query.similarity_top_k { break; }
 
             let inner_id = neighbor.d_id as u64;
+            // TOMBSTONE CHECK: If not in mapping_table, it's a ghost (deleted) entry
             if let Some(node_id) = mapping_table.get(inner_id)? {
                 let node_id_str = node_id.value();
                 

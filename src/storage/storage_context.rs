@@ -12,7 +12,28 @@ use crate::vector_stores::simple::SimpleVectorStore;
 use crate::vector_stores::native::NativeVectorStore;
 use anyhow::Result;
 use std::sync::Arc;
-use std::path::Path;
+use std::path::PathBuf;
+
+#[derive(Debug, Default)]
+struct FoundStores {
+    docstore: bool,
+    index_store: bool,
+    vector_store: bool,
+}
+
+impl FoundStores {
+    fn is_complete(&self) -> bool {
+        self.docstore && self.index_store && self.vector_store
+    }
+
+    fn missing_report(&self) -> String {
+        let mut missing = Vec::new();
+        if !self.docstore { missing.push("docstore"); }
+        if !self.index_store { missing.push("index_store"); }
+        if !self.vector_store { missing.push("vector_store"); }
+        missing.join(", ")
+    }
+}
 
 #[derive(Clone)]
 pub struct StorageContext {
@@ -46,67 +67,84 @@ impl StorageContext {
     pub fn from_defaults() -> Self {
         Self::in_memory()
     }
+}
 
+impl StorageContext {
     pub fn from_dir(persist_dir: &str) -> Result<Self> {
-        let bin_docstore_path = format!("{}/docstore.bin", persist_dir);
-        let bin_index_store_path = format!("{}/index_store.bin", persist_dir);
-        let bin_vector_store_path = format!("{}/vector_store.bin", persist_dir);
+        let root = PathBuf::from(persist_dir);
+        let mut found = FoundStores::default();
 
-        #[cfg(feature = "persistence")]
-        {
-            let redb_docstore_path = format!("{}/docstore.redb", persist_dir);
-            let redb_index_store_path = format!("{}/index_store.redb", persist_dir);
-            let native_db_path = format!("{}/native_db.redb", persist_dir);
+        let bin_docstore_path = root.join("docstore.bin");
+        let bin_index_store_path = root.join("index_store.bin");
+        let bin_vector_store_path = root.join("vector_store.bin");
 
-            let docstore = if Path::new(&redb_docstore_path).exists() {
-                Arc::new(RedbDocumentStore::new(&redb_docstore_path)?) as Arc<dyn DocumentStore>
-            } else if Path::new(&bin_docstore_path).exists() {
-                Arc::new(SimpleDocumentStore::load(&bin_docstore_path)?) as Arc<dyn DocumentStore>
-            } else {
-                Arc::new(RedbDocumentStore::new(&redb_docstore_path)?) as Arc<dyn DocumentStore>
-            };
+        let redb_docstore_path = root.join("docstore.redb");
+        let redb_index_store_path = root.join("index_store.redb");
+        let native_db_path = root.join("native_db.redb");
 
-            let index_store = if Path::new(&redb_index_store_path).exists() {
-                Arc::new(RedbIndexStore::new(&redb_index_store_path)?) as Arc<dyn IndexStore>
-            } else if Path::new(&bin_index_store_path).exists() {
-                Arc::new(SimpleIndexStore::load(&bin_index_store_path)?) as Arc<dyn IndexStore>
-            } else {
-                Arc::new(RedbIndexStore::new(&redb_index_store_path)?) as Arc<dyn IndexStore>
-            };
+        // 1. Resolve Document Store
+        let doc_exists_redb = redb_docstore_path.exists();
+        let doc_exists_bin = bin_docstore_path.exists();
+        if doc_exists_redb || doc_exists_bin { found.docstore = true; }
 
-            let vector_store = if Path::new(&native_db_path).exists() {
-                Arc::new(NativeVectorStore::new(&native_db_path, 384)?) as Arc<dyn VectorStore>
-            } else if Path::new(&bin_vector_store_path).exists() {
-                Arc::new(SimpleVectorStore::load(&bin_vector_store_path)?) as Arc<dyn VectorStore>
-            } else {
-                Arc::new(NativeVectorStore::new(&native_db_path, 384)?) as Arc<dyn VectorStore>
-            };
+        let docstore: Arc<dyn DocumentStore> = if doc_exists_redb {
+            #[cfg(feature = "persistence")]
+            { Arc::new(RedbDocumentStore::new(redb_docstore_path.to_str().unwrap())?) }
+            #[cfg(not(feature = "persistence"))]
+            { return Err(anyhow::anyhow!("Detected redb document store but 'persistence' feature is disabled")); }
+        } else if doc_exists_bin {
+            Arc::new(SimpleDocumentStore::load(bin_docstore_path.to_str().unwrap())?)
+        } else {
+            #[cfg(feature = "persistence")]
+            { Arc::new(RedbDocumentStore::new(redb_docstore_path.to_str().unwrap())?) }
+            #[cfg(not(feature = "persistence"))]
+            { Arc::new(SimpleDocumentStore::new()) }
+        };
 
-            Ok(Self { docstore, vector_store, index_store })
+        // 2. Resolve Index Store
+        let idx_exists_redb = redb_index_store_path.exists();
+        let idx_exists_bin = bin_index_store_path.exists();
+        if idx_exists_redb || idx_exists_bin { found.index_store = true; }
+
+        let index_store: Arc<dyn IndexStore> = if idx_exists_redb {
+            #[cfg(feature = "persistence")]
+            { Arc::new(RedbIndexStore::new(redb_index_store_path.to_str().unwrap())?) }
+            #[cfg(not(feature = "persistence"))]
+            { return Err(anyhow::anyhow!("Detected redb index store but 'persistence' feature is disabled")); }
+        } else if idx_exists_bin {
+            Arc::new(SimpleIndexStore::load(bin_index_store_path.to_str().unwrap())?)
+        } else {
+            #[cfg(feature = "persistence")]
+            { Arc::new(RedbIndexStore::new(redb_index_store_path.to_str().unwrap())?) }
+            #[cfg(not(feature = "persistence"))]
+            { Arc::new(SimpleIndexStore::new()) }
+        };
+
+        // 3. Resolve Vector Store
+        let vec_exists_redb = native_db_path.exists();
+        let vec_exists_bin = bin_vector_store_path.exists();
+        if vec_exists_redb || vec_exists_bin { found.vector_store = true; }
+
+        let vector_store: Arc<dyn VectorStore> = if vec_exists_redb {
+            #[cfg(feature = "persistence")]
+            { Arc::new(NativeVectorStore::new(native_db_path.to_str().unwrap(), 0)?) }
+            #[cfg(not(feature = "persistence"))]
+            { return Err(anyhow::anyhow!("Detected native vector store (redb) but 'persistence' feature is disabled")); }
+        } else if vec_exists_bin {
+            Arc::new(SimpleVectorStore::load(bin_vector_store_path.to_str().unwrap())?)
+        } else {
+            #[cfg(feature = "persistence")]
+            { Arc::new(NativeVectorStore::new(native_db_path.to_str().unwrap(), 384)?) }
+            #[cfg(not(feature = "persistence"))]
+            { Arc::new(SimpleVectorStore::new()) }
+        };
+
+        // 4. Validate Store Consistency
+        if !found.is_complete() && (found.docstore || found.index_store || found.vector_store) {
+            log::warn!("Incomplete storage found in {}. Missing: {}. This might lead to inconsistent data.", persist_dir, found.missing_report());
         }
 
-        #[cfg(not(feature = "persistence"))]
-        {
-            let docstore = if Path::new(&bin_docstore_path).exists() {
-                Arc::new(SimpleDocumentStore::load(&bin_docstore_path)?) as Arc<dyn DocumentStore>
-            } else {
-                Arc::new(SimpleDocumentStore::new()) as Arc<dyn DocumentStore>
-            };
-
-            let index_store = if Path::new(&bin_index_store_path).exists() {
-                Arc::new(SimpleIndexStore::load(&bin_index_store_path)?) as Arc<dyn IndexStore>
-            } else {
-                Arc::new(SimpleIndexStore::new()) as Arc<dyn IndexStore>
-            };
-
-            let vector_store = if Path::new(&bin_vector_store_path).exists() {
-                Arc::new(SimpleVectorStore::load(&bin_vector_store_path)?) as Arc<dyn VectorStore>
-            } else {
-                Arc::new(SimpleVectorStore::new()) as Arc<dyn VectorStore>
-            };
-
-            Ok(Self { docstore, vector_store, index_store })
-        }
+        Ok(Self { docstore, vector_store, index_store })
     }
 
     pub async fn persist(&self, persist_dir: &str) -> Result<()> {

@@ -61,6 +61,13 @@ pub struct Node {
     pub metadata_separator: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MetadataContext {
+    Embedding,
+    Llm,
+    General,
+}
+
 impl Node {
     /// Discard the original string content to save memory. 
     /// Should only be called after tokens or embeddings are generated.
@@ -87,7 +94,7 @@ impl Node {
 
     pub fn new_text(text: String) -> Self {
         let mut node = Self {
-            id_: String::new(), // Temporary
+            id_: String::new(), 
             embedding: None,
             tokens: None,
             metadata: TypedMetadata::default(),
@@ -98,14 +105,14 @@ impl Node {
             metadata_template: "{key}: {value}".to_string(),
             metadata_separator: "\n".to_string(),
         };
-        node.id_ = node.hash();
+        node.id_ = node.calculate_content_hash();
         node
     }
 
-    pub fn hash(&self) -> String {
+    /// Calculate hash based purely on content for deterministic identity.
+    /// If content is Purged, it returns the current ID (which was derived from original content).
+    pub fn calculate_content_hash(&self) -> String {
         let mut hasher = blake3::Hasher::new();
-        
-        // 1. Hash Content
         match &self.content {
             NodeContent::Text(t) => {
                 hasher.update(t.as_bytes());
@@ -115,11 +122,19 @@ impl Node {
             }
             NodeContent::Purged => {
                 // If purged, we cannot re-calculate hash from content.
-                // But we must NOT allow hash change. 
-                // We assume id_ stores the ORIGINAL hash.
+                // We return the original ID to maintain identity.
                 return self.id_.clone();
             }
         }
+        hasher.finalize().to_hex().to_string()
+    }
+
+    /// Calculate full hash including metadata for strict versioning.
+    pub fn hash(&self) -> String {
+        let mut hasher = blake3::Hasher::new();
+        
+        // 1. Hash Content Identity
+        hasher.update(self.id_.as_bytes());
 
         // 2. Hash Metadata (Deterministic via BTreeMap sorting)
         let mut deterministic_meta = BTreeMap::new();
@@ -142,50 +157,64 @@ impl Node {
 
         hasher.finalize().to_hex().to_string()
     }
+}
 
-    pub fn metadata_to_str(&self) -> String {
-        let mut metadata_lines = Vec::new();
+impl TypedMetadata {
+    pub fn to_string_with_template(&self, template: &str, separator: &str, excluded_keys: &[String]) -> String {
+        let mut lines = Vec::new();
         
-        // Helper to add structured fields
         let mut add_field = |key: &str, val: Option<String>| {
             if let Some(v) = val {
-                if !self.excluded_embed_metadata_keys.contains(&key.to_string()) {
-                    metadata_lines.push(self.metadata_template.replace("{key}", key).replace("{value}", &v));
+                if !excluded_keys.contains(&key.to_string()) {
+                    lines.push(template.replace("{key}", key).replace("{value}", &v));
                 }
             }
         };
 
-        add_field("url", self.metadata.url.clone());
-        add_field("file_path", self.metadata.file_path.clone());
-        add_field("genre", self.metadata.genre.clone());
-        if let Some(c) = self.metadata.confidence {
+        add_field("url", self.url.clone());
+        add_field("file_path", self.file_path.clone());
+        add_field("genre", self.genre.clone());
+        if let Some(c) = self.confidence {
             add_field("confidence", Some(format!("{:.2}", c)));
         }
-        if let Some(i) = self.metadata.importance {
+        if let Some(i) = self.importance {
             add_field("importance", Some(format!("{:.2}", i)));
         }
-        if let Some(ts) = self.metadata.timestamp {
+        if let Some(ts) = self.timestamp {
             add_field("timestamp", Some(ts.to_rfc3339()));
         }
 
-        // Add extra fields
-        let mut sorted_extra: Vec<_> = self.metadata.extra.iter().collect();
+        let mut sorted_extra: Vec<_> = self.extra.iter().collect();
         sorted_extra.sort_by_key(|k| k.0);
 
         for (key, value) in sorted_extra {
-            if self.excluded_embed_metadata_keys.contains(key) {
+            if excluded_keys.contains(key) {
                 continue;
             }
             let val_str = match value {
                 serde_json::Value::String(s) => s.clone(),
                 _ => value.to_string(),
             };
-            let line = self.metadata_template
-                .replace("{key}", key)
-                .replace("{value}", &val_str);
-            metadata_lines.push(line);
+            lines.push(template.replace("{key}", key).replace("{value}", &val_str));
         }
-        metadata_lines.join(&self.metadata_separator)
+
+        lines.join(separator)
+    }
+}
+
+impl Node {
+    pub fn metadata_to_str(&self, context: MetadataContext) -> String {
+        let excluded_keys = match context {
+            MetadataContext::Embedding => &self.excluded_embed_metadata_keys,
+            MetadataContext::Llm => &self.excluded_llm_metadata_keys,
+            MetadataContext::General => &Vec::new(),
+        };
+
+        self.metadata.to_string_with_template(
+            &self.metadata_template,
+            &self.metadata_separator,
+            excluded_keys
+        )
     }
 }
 

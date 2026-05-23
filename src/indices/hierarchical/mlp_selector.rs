@@ -7,7 +7,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 
 pub struct MlpNodeSelector {
-    model: VectorSelector,
+    _model: VectorSelector,
 }
 
 impl MlpNodeSelector {
@@ -18,7 +18,7 @@ impl MlpNodeSelector {
         let model = VectorSelector::new(384, vb)?;
         // Load weights
         varmap.load("src/research/selector_v1/selector_weights.safetensors")?;
-        Ok(Self { model })
+        Ok(Self { _model: model })
     }
 }
 

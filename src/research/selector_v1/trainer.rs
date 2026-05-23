@@ -5,7 +5,7 @@ use candle_nn::{AdamW, Optimizer, ParamsAdamW, VarBuilder, VarMap};
 pub struct SelectorTrainer {
     model: VectorSelector,
     varmap: VarMap,
-    device: Device,
+    _device: Device,
 }
 
 impl SelectorTrainer {
@@ -14,7 +14,7 @@ impl SelectorTrainer {
         let varmap = VarMap::new();
         let vb = VarBuilder::from_varmap(&varmap, candle_core::DType::F32, &device);
         let model = VectorSelector::new(dim, vb)?;
-        Ok(Self { model, varmap, device })
+        Ok(Self { model, varmap, _device: device })
     }
 
     pub fn train_on_tensors(&mut self, queries: &Tensor, choices: &Tensor, parents: &Tensor, targets: &Tensor, epochs: usize) -> Result<()> {

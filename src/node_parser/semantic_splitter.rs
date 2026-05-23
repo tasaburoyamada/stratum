@@ -4,13 +4,15 @@ use crate::embeddings::base::Embedding;
 use anyhow::Result;
 use async_trait::async_trait;
 use regex::Regex;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
+
+static SENTENCE_REGEX: OnceLock<Regex> = OnceLock::new();
 
 pub struct SemanticSplitter {
     pub embed_model: Arc<dyn Embedding>,
     pub buffer_size: usize,
     pub breakpoint_percentile_threshold: f32,
-    pub sentence_regex: Regex,
+    pub embedding_batch_size: usize,
 }
 
 impl std::fmt::Debug for SemanticSplitter {
@@ -18,6 +20,7 @@ impl std::fmt::Debug for SemanticSplitter {
         f.debug_struct("SemanticSplitter")
             .field("buffer_size", &self.buffer_size)
             .field("breakpoint_percentile_threshold", &self.breakpoint_percentile_threshold)
+            .field("embedding_batch_size", &self.embedding_batch_size)
             .finish()
     }
 }
@@ -28,12 +31,18 @@ impl SemanticSplitter {
             embed_model,
             buffer_size: 1,
             breakpoint_percentile_threshold: 95.0,
-            sentence_regex: Regex::new(r"[^.!?。！？]+[.!?。！？]?").unwrap(),
+            embedding_batch_size: 32,
         }
     }
 
+    fn get_sentence_regex(&self) -> &Regex {
+        SENTENCE_REGEX.get_or_init(|| {
+            Regex::new(r#"(?m)[^.!?。！？]+[.!?。！？]?["'」』]?"#).unwrap()
+        })
+    }
+
     async fn get_sentence_embeddings(&self, sentences: &[String]) -> Result<Vec<Vec<f32>>> {
-        let embeddings = self.embed_model.get_text_embedding_batch(sentences.to_vec(), 32).await?;
+        let embeddings = self.embed_model.get_text_embedding_batch(sentences.to_vec(), self.embedding_batch_size).await?;
         Ok(embeddings.into_iter().map(|e| e.iter().map(|&x| f32::from(x)).collect()).collect())
     }
 
@@ -43,29 +52,36 @@ impl SemanticSplitter {
             return distances;
         }
 
-        let mut combined_embeddings = Vec::new();
-        for i in 0..embeddings.len() {
-            let start = i.saturating_sub(self.buffer_size);
-            let end = (i + self.buffer_size).min(embeddings.len() - 1);
-            
-            let mut avg_emb = vec![0.0; embeddings[0].len()];
-            let count = (end - start + 1) as f32;
-            for j in start..=end {
-                for k in 0..avg_emb.len() {
-                    avg_emb[k] += embeddings[j][k];
-                }
-            }
-            for k in 0..avg_emb.len() {
-                avg_emb[k] /= count;
-            }
-            combined_embeddings.push(avg_emb);
-        }
+        // Compare non-overlapping windows: avg(i-buffer+1..=i) vs avg(i+1..=i+buffer)
+        for i in 0..embeddings.len() - 1 {
+            let left_start = i.saturating_sub(self.buffer_size - 1);
+            let left_end = i;
+            let right_start = i + 1;
+            let right_end = (i + self.buffer_size).min(embeddings.len() - 1);
 
-        for i in 0..combined_embeddings.len() - 1 {
-            let dist = 1.0 - cosine_similarity_f32(&combined_embeddings[i], &combined_embeddings[i+1]);
+            let left_avg = self.average_embeddings(&embeddings[left_start..=left_end]);
+            let right_avg = self.average_embeddings(&embeddings[right_start..=right_end]);
+
+            let dist = 1.0 - cosine_similarity_f32(&left_avg, &right_avg);
             distances.push(dist);
         }
         distances
+    }
+
+    fn average_embeddings(&self, chunk: &[Vec<f32>]) -> Vec<f32> {
+        if chunk.is_empty() { return vec![]; }
+        let dim = chunk[0].len();
+        let mut avg = vec![0.0; dim];
+        for emb in chunk {
+            for k in 0..dim {
+                avg[k] += emb[k];
+            }
+        }
+        let count = chunk.len() as f32;
+        for k in 0..dim {
+            avg[k] /= count;
+        }
+        avg
     }
 }
 
@@ -89,7 +105,8 @@ impl Transformation for SemanticSplitter {
 
         for node in nodes {
             if let crate::core::schema::NodeContent::Text(text) = &node.content {
-                let sentences: Vec<String> = self.sentence_regex.find_iter(text)
+                let regex = self.get_sentence_regex();
+                let sentences: Vec<String> = regex.find_iter(text)
                     .map(|m| m.as_str().trim().to_string())
                     .filter(|s| !s.is_empty())
                     .collect();
@@ -99,32 +116,46 @@ impl Transformation for SemanticSplitter {
                     continue;
                 }
 
-                let embeddings = self.get_sentence_embeddings(&sentences).await?;
-                let distances = self.calculate_distances(&embeddings);
+                const MAX_CHUNK_SENTENCES: usize = 1000; // Hard limit to prevent OOM
+                
+                // Collect all embeddings first to compute global threshold and boundary distances.
+                // For extremely large documents, memory usage will be O(N_sentences * D_embedding).
+                let all_embeddings = self.get_sentence_embeddings(&sentences).await?;
+                let distances = self.calculate_distances(&all_embeddings);
 
                 let mut sorted_distances = distances.clone();
-                sorted_distances.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                sorted_distances.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
                 
-                let threshold_idx = (sorted_distances.len() as f32 * self.breakpoint_percentile_threshold / 100.0) as usize;
-                let threshold = sorted_distances.get(threshold_idx.min(sorted_distances.len() - 1)).cloned().unwrap_or(0.5);
+                let threshold = if !sorted_distances.is_empty() {
+                    let threshold_idx = (sorted_distances.len() as f32 * self.breakpoint_percentile_threshold / 100.0) as usize;
+                    sorted_distances.get(threshold_idx.min(sorted_distances.len() - 1)).cloned().unwrap_or(0.5)
+                } else {
+                    0.5
+                };
 
-                let mut chunks = Vec::new();
-                let mut current_chunk = Vec::new();
+                let mut current_chunk_text = Vec::new();
+                for (j, sentence) in sentences.iter().enumerate() {
+                    current_chunk_text.push(sentence.clone());
+                    
+                    let should_split = (j < distances.len() && distances[j] > threshold) || 
+                                     (current_chunk_text.len() >= MAX_CHUNK_SENTENCES);
 
-                for (i, sentence) in sentences.into_iter().enumerate() {
-                    current_chunk.push(sentence);
-                    if i < distances.len() && distances[i] > threshold {
-                        chunks.push(current_chunk.join(" "));
-                        current_chunk = Vec::new();
+                    if should_split {
+                        let mut new_node = Node::new_text(current_chunk_text.join(" "));
+                        new_node.metadata = node.metadata.clone();
+                        // Fix: Preserve metadata exclusion settings
+                        new_node.excluded_embed_metadata_keys = node.excluded_embed_metadata_keys.clone();
+                        new_node.excluded_llm_metadata_keys = node.excluded_llm_metadata_keys.clone();
+                        all_new_nodes.push(new_node);
+                        current_chunk_text = Vec::new();
                     }
                 }
-                if !current_chunk.is_empty() {
-                    chunks.push(current_chunk.join(" "));
-                }
-
-                for chunk in chunks {
-                    let mut new_node = Node::new_text(chunk);
+                
+                if !current_chunk_text.is_empty() {
+                    let mut new_node = Node::new_text(current_chunk_text.join(" "));
                     new_node.metadata = node.metadata.clone();
+                    new_node.excluded_embed_metadata_keys = node.excluded_embed_metadata_keys.clone();
+                    new_node.excluded_llm_metadata_keys = node.excluded_llm_metadata_keys.clone();
                     all_new_nodes.push(new_node);
                 }
             } else {
@@ -163,7 +194,7 @@ mod tests {
             embed_model: Arc::new(DummyEmbedding),
             buffer_size: 1,
             breakpoint_percentile_threshold: 95.0,
-            sentence_regex: Regex::new(r"[^.!?。！？]+[.!?。！？]?").unwrap(),
+            embedding_batch_size: 32,
         };
 
         // Create 4 dummy embeddings

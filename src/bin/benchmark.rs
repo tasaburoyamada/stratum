@@ -67,7 +67,10 @@ async fn main() -> Result<()> {
     let mock_slow = Arc::new(MockEmbedding { latency_ms: 50 });
     
     let start = Instant::now();
-    let texts: Vec<String> = nodes.iter().map(|n| n.get_content(None).unwrap()).collect();
+    let mut texts = Vec::new();
+    for n in nodes.iter() {
+        texts.push(n.get_content(None)?);
+    }
     let _embeddings = mock_slow.get_text_embedding_batch(texts, 32).await?;
     let total_time = start.elapsed();
     

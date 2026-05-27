@@ -37,7 +37,8 @@ impl SemanticSplitter {
 
     fn get_sentence_regex(&self) -> &Regex {
         SENTENCE_REGEX.get_or_init(|| {
-            Regex::new(r#"(?m)[^.!?。！？]+[.!?。！？]?["'」』]?"#).unwrap()
+            Regex::new(r#"(?m)[^.!?。！？]+[.!?。！？]?["'」』]?"#)
+                .expect("Failed to initialize sentence regex")
         })
     }
 
@@ -52,7 +53,6 @@ impl SemanticSplitter {
             return distances;
         }
 
-        // Compare non-overlapping windows: avg(i-buffer+1..=i) vs avg(i+1..=i+buffer)
         for i in 0..embeddings.len() - 1 {
             let left_start = i.saturating_sub(self.buffer_size - 1);
             let left_end = i;
@@ -116,10 +116,8 @@ impl Transformation for SemanticSplitter {
                     continue;
                 }
 
-                const MAX_CHUNK_SENTENCES: usize = 1000; // Hard limit to prevent OOM
+                const MAX_CHUNK_SENTENCES: usize = 1000;
                 
-                // Collect all embeddings first to compute global threshold and boundary distances.
-                // For extremely large documents, memory usage will be O(N_sentences * D_embedding).
                 let all_embeddings = self.get_sentence_embeddings(&sentences).await?;
                 let distances = self.calculate_distances(&all_embeddings);
 
@@ -128,7 +126,7 @@ impl Transformation for SemanticSplitter {
                 
                 let threshold = if !sorted_distances.is_empty() {
                     let threshold_idx = (sorted_distances.len() as f32 * self.breakpoint_percentile_threshold / 100.0) as usize;
-                    sorted_distances.get(threshold_idx.min(sorted_distances.len() - 1)).cloned().unwrap_or(0.5)
+                    *sorted_distances.get(threshold_idx.min(sorted_distances.len() - 1)).unwrap_or(&0.5)
                 } else {
                     0.5
                 };
@@ -143,7 +141,6 @@ impl Transformation for SemanticSplitter {
                     if should_split {
                         let mut new_node = Node::new_text(current_chunk_text.join(" "));
                         new_node.metadata = node.metadata.clone();
-                        // Fix: Preserve metadata exclusion settings
                         new_node.excluded_embed_metadata_keys = node.excluded_embed_metadata_keys.clone();
                         new_node.excluded_llm_metadata_keys = node.excluded_llm_metadata_keys.clone();
                         all_new_nodes.push(new_node);

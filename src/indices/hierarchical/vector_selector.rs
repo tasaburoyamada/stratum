@@ -44,6 +44,9 @@ pub struct VectorNodeSelector {
 impl VectorNodeSelector {
     /// Initialize with loaded weights and an embedding model.
     pub fn new(weights_path: &str, dim: usize, embed_model: Arc<dyn Embedding>, threshold: f32) -> Result<Self> {
+        if !std::path::Path::new(weights_path).exists() {
+            return Err(anyhow::anyhow!("Weights file not found: {}", weights_path));
+        }
         let device = Device::Cpu;
         let vb = unsafe { VarBuilder::from_mmaped_safetensors(&[weights_path], candle_core::DType::F32, &device)? };
         let model = VectorSelectorModel::new(dim, vb)?;

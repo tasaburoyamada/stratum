@@ -29,7 +29,7 @@ async fn main() -> Result<()> {
     )?);
 
     // 2. Load Training Data
-    let loader = SelectorDataLoader::new("stratum/selector_feeding.jsonl");
+    let loader = SelectorDataLoader::new("selector_feeding.jsonl");
     let triplets = match loader.load_all() {
         Ok(t) => t,
         Err(e) => {

@@ -1,7 +1,7 @@
 use crate::core::schema::{NodeWithScore, NodeRelationship};
 use crate::core::query_bundle::QueryBundle;
 use crate::retrievers::base::Retriever;
-use crate::indices::hierarchical::{HierarchicalIndex, NodeSelector, LlmNodeSelector};
+use crate::indices::hierarchical::{HierarchicalIndex, NodeSelector, VectorNodeSelector};
 use anyhow::Result;
 use async_trait::async_trait;
 use std::sync::Arc;
@@ -13,13 +13,23 @@ pub struct HierarchicalRetriever {
 }
 
 impl HierarchicalRetriever {
-    pub fn new(index: Arc<HierarchicalIndex>, max_traversal_depth: usize) -> Self {
-        let selector = Arc::new(LlmNodeSelector::new(index.llm.clone()));
-        Self {
+    pub fn new(index: Arc<HierarchicalIndex>, max_traversal_depth: usize) -> Result<Self> {
+        // Hardcoded for now, ideally from config
+        let weights_path = "src/research/selector_v1/selector_weights.safetensors";
+        let dim = 384;
+        let threshold = 0.5;
+
+        let selector = Arc::new(VectorNodeSelector::new(
+            weights_path,
+            dim,
+            index.embed_model.clone(),
+            threshold,
+        )?);
+        Ok(Self {
             index,
             selector,
             max_traversal_depth,
-        }
+        })
     }
 
     pub fn with_selector(index: Arc<HierarchicalIndex>, selector: Arc<dyn NodeSelector>, max_traversal_depth: usize) -> Self {

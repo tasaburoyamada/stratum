@@ -89,14 +89,14 @@ impl StorageContext {
 
         let docstore: Arc<dyn DocumentStore> = if doc_exists_redb {
             #[cfg(feature = "persistence")]
-            { Arc::new(RedbDocumentStore::new(redb_docstore_path.to_str().unwrap())?) }
+            { Arc::new(RedbDocumentStore::new(&redb_docstore_path.to_string_lossy())?) }
             #[cfg(not(feature = "persistence"))]
             { return Err(anyhow::anyhow!("Detected redb document store but 'persistence' feature is disabled")); }
         } else if doc_exists_bin {
-            Arc::new(SimpleDocumentStore::load(bin_docstore_path.to_str().unwrap())?)
+            Arc::new(SimpleDocumentStore::load(&bin_docstore_path.to_string_lossy())?)
         } else {
             #[cfg(feature = "persistence")]
-            { Arc::new(RedbDocumentStore::new(redb_docstore_path.to_str().unwrap())?) }
+            { Arc::new(RedbDocumentStore::new(&redb_docstore_path.to_string_lossy())?) }
             #[cfg(not(feature = "persistence"))]
             { Arc::new(SimpleDocumentStore::new()) }
         };
@@ -108,14 +108,14 @@ impl StorageContext {
 
         let index_store: Arc<dyn IndexStore> = if idx_exists_redb {
             #[cfg(feature = "persistence")]
-            { Arc::new(RedbIndexStore::new(redb_index_store_path.to_str().unwrap())?) }
+            { Arc::new(RedbIndexStore::new(&redb_index_store_path.to_string_lossy())?) }
             #[cfg(not(feature = "persistence"))]
             { return Err(anyhow::anyhow!("Detected redb index store but 'persistence' feature is disabled")); }
         } else if idx_exists_bin {
-            Arc::new(SimpleIndexStore::load(bin_index_store_path.to_str().unwrap())?)
+            Arc::new(SimpleIndexStore::load(&bin_index_store_path.to_string_lossy())?)
         } else {
             #[cfg(feature = "persistence")]
-            { Arc::new(RedbIndexStore::new(redb_index_store_path.to_str().unwrap())?) }
+            { Arc::new(RedbIndexStore::new(&redb_index_store_path.to_string_lossy())?) }
             #[cfg(not(feature = "persistence"))]
             { Arc::new(SimpleIndexStore::new()) }
         };
@@ -127,14 +127,14 @@ impl StorageContext {
 
         let vector_store: Arc<dyn VectorStore> = if vec_exists_redb {
             #[cfg(feature = "persistence")]
-            { Arc::new(NativeVectorStore::new(native_db_path.to_str().unwrap(), 0)?) }
+            { Arc::new(NativeVectorStore::new(&native_db_path.to_string_lossy(), 0)?) }
             #[cfg(not(feature = "persistence"))]
             { return Err(anyhow::anyhow!("Detected native vector store (redb) but 'persistence' feature is disabled")); }
         } else if vec_exists_bin {
-            Arc::new(SimpleVectorStore::load(bin_vector_store_path.to_str().unwrap())?)
+            Arc::new(SimpleVectorStore::load(&bin_vector_store_path.to_string_lossy())?)
         } else {
             #[cfg(feature = "persistence")]
-            { Arc::new(NativeVectorStore::new(native_db_path.to_str().unwrap(), 384)?) }
+            { Arc::new(NativeVectorStore::new(&native_db_path.to_string_lossy(), 384)?) }
             #[cfg(not(feature = "persistence"))]
             { Arc::new(SimpleVectorStore::new()) }
         };

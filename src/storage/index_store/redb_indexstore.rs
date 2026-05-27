@@ -13,7 +13,11 @@ pub struct RedbIndexStore {
 
 impl RedbIndexStore {
     pub fn new(path: &str) -> Result<Self> {
-        let db = Database::create(path)?;
+        let db = if std::path::Path::new(path).exists() {
+            Database::open(path)?
+        } else {
+            Database::create(path)?
+        };
         {
             let write_txn = db.begin_write()?;
             {

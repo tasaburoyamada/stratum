@@ -2,6 +2,7 @@ use crate::core::schema::{Node, NodeRelationship, RelatedNodeInfo, NodeType};
 use crate::storage::index_store::IndexStruct;
 use crate::storage::storage_context::StorageContext;
 use crate::llm::LlmClient;
+use crate::embeddings::base::Embedding;
 use anyhow::Result;
 use std::sync::Arc;
 use std::collections::HashMap;
@@ -9,6 +10,7 @@ use std::collections::HashMap;
 pub struct HierarchicalIndex {
     pub storage_context: StorageContext,
     pub llm: Arc<dyn LlmClient>,
+    pub embed_model: Arc<dyn Embedding>,
     pub root_node_ids: Vec<String>,
     pub index_id: String,
 }
@@ -17,12 +19,14 @@ impl HierarchicalIndex {
     pub fn new(
         storage_context: StorageContext,
         llm: Arc<dyn LlmClient>,
+        embed_model: Arc<dyn Embedding>,
         root_node_ids: Vec<String>,
         index_id: String,
     ) -> Self {
         Self {
             storage_context,
             llm,
+            embed_model,
             root_node_ids,
             index_id,
         }
@@ -31,6 +35,7 @@ impl HierarchicalIndex {
     pub async fn from_storage_context_async(
         storage_context: StorageContext,
         llm: Arc<dyn LlmClient>,
+        embed_model: Arc<dyn Embedding>,
         index_id: String,
     ) -> Result<Self> {
         let index_struct = storage_context.index_store.get_index_struct(&index_id).await?
@@ -44,6 +49,7 @@ impl HierarchicalIndex {
         Ok(Self {
             storage_context,
             llm,
+            embed_model,
             root_node_ids,
             index_id,
         })
@@ -53,11 +59,8 @@ impl HierarchicalIndex {
         nodes: Vec<Node>,
         storage_context: StorageContext,
         llm: Arc<dyn LlmClient>,
+        embed_model: Arc<dyn Embedding>,
     ) -> Result<Self> {
-        let mut rng = rand::thread_rng();
-        let unique_suffix: u64 = rand::Rng::gen(&mut rng);
-        let index_id = format!("hidx_{:x}", unique_suffix);
-        
         // 1. Initial nodes are the leaves
         let mut current_level_nodes = nodes;
         let mut all_nodes = Vec::new();
@@ -145,6 +148,15 @@ impl HierarchicalIndex {
 
         let root_node_ids: Vec<String> = current_level_nodes.iter().map(|n| n.id_.clone()).collect();
         
+        // Deterministic ID generation based on sorted root node IDs
+        let mut sorted_root_ids = root_node_ids.clone();
+        sorted_root_ids.sort();
+        let mut hasher = blake3::Hasher::new();
+        for id in sorted_root_ids {
+            hasher.update(id.as_bytes());
+        }
+        let index_id = format!("hidx_{}", hasher.finalize().to_hex().to_string().get(0..12).unwrap_or(""));
+        
         // 3. Save index struct
         let mut node_ids_dict = HashMap::new();
         for n in &all_nodes {
@@ -162,7 +174,7 @@ impl HierarchicalIndex {
         };
         storage_context.index_store.add_index_struct(index_struct).await?;
 
-        Ok(Self::new(storage_context, llm, root_node_ids, index_id))
+        Ok(Self::new(storage_context, llm, embed_model, root_node_ids, index_id))
     }
 
     async fn summarize_nodes(nodes: &[Node], llm: Arc<dyn LlmClient>) -> Result<Node> {
